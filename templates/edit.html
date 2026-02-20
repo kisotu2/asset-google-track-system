@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Edit Laptop</h2>
+
+<form method="POST">
+<input name="asset_tag" value="{{ laptop.asset_tag }}">
+<input name="serial_number" value="{{ laptop.serial_number }}">
+<input name="brand" value="{{ laptop.brand }}">
+<input name="model" value="{{ laptop.model }}">
+<input name="department" value="{{ laptop.department }}">
+<input name="assigned_to" value="{{ laptop.assigned_to }}">
+
+<select name="status">
+<option {% if laptop.status=='Active' %}selected{% endif %}>Active</option>
+<option {% if laptop.status=='Faulty' %}selected{% endif %}>Faulty</option>
+<option {% if laptop.status=='Retired' %}selected{% endif %}>Retired</option>
+</select>
+
+<input type="date" name="purchase_date" value="{{ laptop.purchase_date }}">
+<input type="date" name="warranty_expiry" value="{{ laptop.warranty_expiry }}">
+
+<button type="submit">Update</button>
+</form>
+
+{% endblock %}

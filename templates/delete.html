@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h2>Confirm Delete</h2>
+
+<p>Are you sure you want to delete <strong>{{ laptop.asset_tag }}</strong>?</p>
+
+<form method="POST">
+<button type="submit" style="background:red;">Confirm Delete</button>
+</form>
+
+{% endblock %}
