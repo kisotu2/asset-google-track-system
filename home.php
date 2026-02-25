@@ -195,7 +195,7 @@
     <div class="right">
 
         <div class="top-links">
-            <a href="#">Sign up</a>
+            <a href="register_admin.php">Sign up</a>
             <a href="login.php" class="signin">Sign in</a>
         </div>
 

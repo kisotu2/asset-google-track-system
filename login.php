@@ -3,25 +3,34 @@ require 'db.php';
 session_start();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $db = getDB();
-    $stmt = $db->prepare("SELECT * FROM users WHERE email = ?");
-    $stmt->execute([$_POST['email']]);
-    $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    if ($user && password_verify($_POST['password'], $user['password'])) {
+    $email = $_POST['email'];
+    $password = $_POST['password'];
 
-        $_SESSION['user'] = $user['email'];
-        $_SESSION['role'] = $user['role'];
+    $stmt = $conn->prepare("SELECT * FROM users WHERE email = ?");
+    $stmt->bind_param("s", $email);
+    $stmt->execute();
 
-        if ($user['role'] === 'super_admin' || $user['role'] === 'admin') {
-            header("Location: admin.php");
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+
+    if ($user && password_verify($password, $user['password']) && $user['status'] == 'active') {
+
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['role']    = $user['role'];
+        $_SESSION['name']    = $user['full_name'];
+
+        if ($user['role'] === 'super_admin') {
+            header("Location: super_dashboard.php");
+        } elseif ($user['role'] === 'admin') {
+            header("Location: admin_dashboard.php");
         } else {
-            header("Location: index.php");
+            header("Location: user_index.php");
         }
         exit();
 
     } else {
-        $error = "Invalid email or password!";
+        $error = "Invalid email or password, or account inactive.";
     }
 }
 ?>
@@ -29,28 +38,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html>
 <head>
-<title>Login</title>
+<title>Asset Management System</title>
 <style>
-body { font-family: Arial; background:#f5f5f5; display:flex; justify-content:center; align-items:center; height:100vh; }
-.card { background:white; padding:2rem; border-radius:8px; box-shadow:0 4px 10px rgba(0,0,0,0.1); width:300px; }
-h2 { color:#b08116; text-align:center; }
-input { width:100%; padding:10px; margin:10px 0; }
-button { width:100%; padding:10px; background:#99bb4f; color:white; border:none; cursor:pointer; }
-.error { color:red; text-align:center; }
+body{
+    margin:0;
+    font-family:Arial;
+    background:linear-gradient(to right,#b08116,#99bb4f);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+.card{
+    background:white;
+    padding:2rem;
+    width:350px;
+    border-radius:10px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.2);
+}
+h2{text-align:center;color:#b08116;}
+input{
+    width:100%;
+    padding:12px;
+    margin:10px 0;
+    border:1px solid #ccc;
+    border-radius:5px;
+}
+button{
+    width:100%;
+    padding:12px;
+    background:#99bb4f;
+    border:none;
+    color:white;
+    font-weight:bold;
+    border-radius:5px;
+    cursor:pointer;
+}
+button:hover{opacity:0.9;}
+.error{color:red;text-align:center;}
+.link{text-align:center;margin-top:10px;}
 </style>
 </head>
 <body>
 
 <div class="card">
-<h2>Asset System Login</h2>
+<h2>Login</h2>
 
 <?php if(isset($error)) echo "<p class='error'>$error</p>"; ?>
 
 <form method="POST">
-<input type="email" name="email" placeholder="Email" required>
+<input type="email" name="email" placeholder="Company Email" required>
 <input type="password" name="password" placeholder="Password" required>
 <button type="submit">Login</button>
 </form>
+
+<div class="link">
+<a href="register.php">Register as User</a>
+</div>
 </div>
 
 </body>
