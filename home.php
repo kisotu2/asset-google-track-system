@@ -3,173 +3,184 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Asset Management Login</title>
+<title>IRA Asset Management System</title>
 
 <style>
-    :root {
-        --primary: #0f4c81;      /* Deep Blue */
-        --secondary: #00b4a0;    /* Teal */
-        --light-bg: #f4f9fb;
-        --text-dark: #1f2d3d;
-        --text-light: #6c7a89;
-    }
 
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-        font-family: 'Segoe UI', sans-serif;
-    }
+:root {
+    --primary: #003366;
+    --secondary: #C8102E;
+    --accent: #F2A900;
+    --light-bg: #eef2f7;
+    --text-dark: #1f2d3d;
+    --text-light: #6c7a89;
+}
 
-    body {
-        background: var(--light-bg);
-        display: flex;
-        height: 100vh;
-    }
+/* Reset */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', sans-serif;
+}
 
+/* Animated Background */
+body {
+    height: 100vh;
+    background:linear-gradient(to right,#b08116,#99bb4f);
+    background-size: 400% 400%;
+    animation: gradientMove 12s ease infinite;
+    display: flex;
+    border-radius: 0 0 20px 20px;
+}
+
+@keyframes gradientMove {
+    0% {background-position: 0% 50%;}
+    50% {background-position: 100% 50%;}
+    100% {background-position: 0% 50%;}
+}
+
+/* Layout */
+.container {
+    display: flex;
+    width: 100%;
+}
+
+/* LEFT PANEL */
+.left {
+    flex: 1;
+    padding: 60px;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.ira-logo {
+    width: 170px;
+    margin-bottom: 25px;
+}
+
+.system-title {
+    font-size: 30px;
+    font-weight: 600;
+    margin-bottom: 10px;
+}
+
+.motto {
+    color: var(--accent);
+    font-style: italic;
+    margin-bottom: 30px;
+}
+
+.description {
+    max-width: 400px;
+    color: #d6e2f0;
+}
+
+/* RIGHT PANEL */
+.right {
+    flex: 1;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(10px);
+    padding: 80px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    position: relative;
+}
+
+/* Login Card */
+.login-card {
+    background: white;
+    padding: 45px;
+    border-radius: 18px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+}
+
+h2 {
+    color: var(--primary);
+    margin-bottom: 25px;
+}
+
+/* Inputs */
+input {
+    width: 100%;
+    padding: 14px;
+    margin: 10px 0 20px;
+    border-radius: 10px;
+    border: 1px solid #dce3ea;
+    transition: 0.3s;
+}
+
+input:focus {
+    border-color: var(--secondary);
+    box-shadow: 0 0 0 3px rgba(200,16,46,0.1);
+}
+
+/* Password Wrapper */
+.password-wrapper {
+    position: relative;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 15px;
+    top: 18px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-light);
+}
+
+/* Remember Me */
+.remember {
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+    margin-bottom: 20px;
+}
+
+.remember input {
+    width: auto;
+    margin-right: 8px;
+}
+
+/* Button */
+.btn-login {
+    width: 100%;
+    padding: 14px;
+    border: none;
+    border-radius: 30px;
+    background:linear-gradient(to right,#b08116,#99bb4f);
+    color: white;
+    font-size: 15px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.btn-login:hover {
+    transform: translateY(-2px);
+    opacity: 0.95;
+}
+
+/* Footer */
+.system-footer {
+    position: absolute;
+    bottom: 20px;
+    right: 60px;
+    font-size: 12px;
+    color: #555;
+}
+
+/* Responsive */
+@media(max-width:900px){
     .container {
-        display: flex;
-        width: 100%;
-    }
-
-    /* LEFT SIDE */
-    .left {
-        flex: 1;
-        background: var(--primary);
-        color: white;
-        padding: 60px;
-        border-top-right-radius: 120px;
-        border-bottom-right-radius: 120px;
-        display: flex;
         flex-direction: column;
-        justify-content: center;
     }
-
-    .logo {
-        font-size: 22px;
-        font-weight: bold;
-        margin-bottom: 40px;
-    }
-
-    .logo span {
-        color: var(--secondary);
-    }
-
-    .illustration {
-        margin: 30px 0;
-        font-size: 80px;
-    }
-
-    .left h1 {
-        font-size: 32px;
-        margin-bottom: 15px;
-    }
-
-    .left p {
-        font-size: 15px;
-        color: #dbe9f4;
-    }
-
-    /* RIGHT SIDE */
     .right {
-        flex: 1;
-        background: white;
-        padding: 80px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
+        padding: 40px;
     }
-
-    .top-links {
-        position: absolute;
-        top: 30px;
-        right: 60px;
-    }
-
-    .top-links a {
-        margin-left: 20px;
-        text-decoration: none;
-        color: var(--primary);
-        font-weight: 500;
-    }
-
-    .top-links .signin {
-        background: var(--secondary);
-        color: white;
-        padding: 8px 18px;
-        border-radius: 20px;
-    }
-
-    h2 {
-        margin-bottom: 30px;
-        color: var(--primary);
-    }
-
-    label {
-        font-size: 14px;
-        color: var(--text-light);
-    }
-
-    input {
-        width: 100%;
-        padding: 12px;
-        margin: 8px 0 20px 0;
-        border: 1px solid #dce3ea;
-        border-radius: 8px;
-        outline: none;
-    }
-
-    input:focus {
-        border-color: var(--secondary);
-    }
-
-    .forgot {
-        text-align: right;
-        font-size: 13px;
-        margin-bottom: 20px;
-    }
-
-    .forgot a {
-        text-decoration: none;
-        color: var(--secondary);
-    }
-
-    .btn-login {
-        background: var(--primary);
-        color: white;
-        border: none;
-        padding: 12px;
-        width: 100%;
-        border-radius: 25px;
-        cursor: pointer;
-        font-size: 15px;
-        transition: 0.3s;
-    }
-
-    .btn-login:hover {
-        background: var(--secondary);
-    }
-
-    .footer-links {
-        position: absolute;
-        bottom: 20px;
-        left: 60px;
-        font-size: 13px;
-        color: white;
-    }
-
-    @media(max-width: 900px){
-        .container{
-            flex-direction: column;
-        }
-        .left{
-            border-radius: 0;
-            text-align: center;
-        }
-        .right{
-            padding: 40px;
-        }
-    }
+}
 
 </style>
 </head>
@@ -177,47 +188,63 @@
 
 <div class="container">
 
-    <!-- LEFT SIDE -->
+    <!-- LEFT -->
     <div class="left">
-        <div class="logo">FCMB <span>Asset Management</span></div>
-
-        <div class="illustration">📊</div>
-
-        <h1>We manage your assets <br> so you grow confidently</h1>
-        <p>Focus on what matters while we take care of your financial growth.</p>
-
-        <div class="footer-links">
-            Terms & Conditions | FAQs | Contact Us
+        <img src="IRA.png" class="ira-logo">
+        <div class="system-title">Asset Management System</div>
+        <div class="motto">Promoting insurance. Protecting the insured.</div>
+        <div class="description">
+            Securely monitor and manage ICT assets across departments with transparency and accountability.
         </div>
     </div>
 
-    <!-- RIGHT SIDE -->
+    <!-- RIGHT -->
     <div class="right">
 
-        <div class="top-links">
-            <a href="register.php">Sign up</a>
-            <a href="login.php" class="signin">Sign in</a>
+        <div class="login-card">
+            <h2>Welcome Back</h2>
+
+            <form>
+                <label>Email Address</label>
+                <input type="email" placeholder="hello@example.com" required>
+
+                <label>Password</label>
+                <div class="password-wrapper">
+                    <input type="password" id="password" placeholder="************" required>
+                    <span class="toggle-password" onclick="togglePassword()">Show</span>
+                </div>
+
+                <div class="remember">
+                    <input type="checkbox">
+                    <label>Remember Me</label>
+                </div>
+
+                <button type="submit" class="btn-login">Login</button>
+            </form>
         </div>
 
-        <h2>Welcome back</h2>
-
-        <form>
-            <label>Email Address</label>
-            <input type="email" placeholder="hello@example.com" required>
-
-            <label>Password</label>
-            <input type="password" placeholder="************" required>
-
-            <div class="forgot">
-                <a href="#">Forgot Password?</a>
-            </div>
-
-            <button type="submit" class="btn-login">Login →</button>
-        </form>
+        <div class="system-footer">
+            IRA Asset Management System by L.Blessings | © 2026 Insurance Regulatory Authority
+        </div>
 
     </div>
 
 </div>
+
+<script>
+function togglePassword() {
+    const password = document.getElementById("password");
+    const toggle = document.querySelector(".toggle-password");
+    
+    if (password.type === "password") {
+        password.type = "text";
+        toggle.textContent = "Hide";
+    } else {
+        password.type = "password";
+        toggle.textContent = "Show";
+    }
+}
+</script>
 
 </body>
 </html>
