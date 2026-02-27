@@ -98,7 +98,48 @@ $result2 = $conn->query("SELECT * FROM laptops WHERE department='ICT' ORDER BY c
 while($row = $result2->fetch_assoc()){
     $assets[] = $row;
 }
+
+// --- Handle Register User ---
+if(isset($_POST['register_user'])){
+
+    $full_name = trim($_POST['full_name']);
+    $email     = trim($_POST['email']);
+    $password  = trim($_POST['password']);
+    $role      = "user";
+    $status    = "active";
+
+    if(!empty($full_name) && !empty($email) && !empty($password)){
+
+        $check = $conn->prepare("SELECT id FROM users WHERE email=?");
+        $check->bind_param("s",$email);
+        $check->execute();
+        $check->store_result();
+
+        if($check->num_rows > 0){
+            $message = "Email already exists!";
+        } else {
+
+            $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
+
+            $stmt = $conn->prepare("
+                INSERT INTO users (full_name,email,password,role,status) 
+                VALUES (?,?,?,?,?)
+            ");
+            $stmt->bind_param("sssss",$full_name,$email,$hashedPassword,$role,$status);
+            $stmt->execute();
+
+            $message = "User registered successfully!";
+        }
+
+        $check->close();
+
+    } else {
+        $message = "All fields are required!";
+    }
+}
 ?>
+
+
 
 <!DOCTYPE html>
 <html>
@@ -159,9 +200,11 @@ function showSection(id){
 <button>Actions ▼</button>
 <div class="dropdown-content">
 <a href="javascript:void(0)" onclick="showSection('add-admin')">Add Admin</a>
+<a href="javascript:void(0)" onclick="showSection('register-user')">Register User</a>
 <a href="javascript:void(0)" onclick="showSection('view-users')">View Users</a>
 <a href="javascript:void(0)" onclick="showSection('add-asset')">Add ICT Asset</a>
 <a href="javascript:void(0)" onclick="showSection('view-assets')">View ICT Assets</a>
+
 </div>
 </div>
 </div>
@@ -178,6 +221,16 @@ function showSection(id){
 </form>
 </div>
 
+<!-- REGISTER USER -->
+<div id="register-user" class="section">
+<h2>Register New User</h2>
+<form method="POST">
+<input type="text" name="full_name" placeholder="Full Name" required>
+<input type="email" name="email" placeholder="Email" required>
+<input type="password" name="password" placeholder="Password" required>
+<button type="submit" name="register_user">Register User</button>
+</form>
+</div>
 
 <!-- VIEW USERS -->
 <div id="view-users" class="section">
@@ -258,6 +311,8 @@ N/A
 <?php endforeach; ?>
 </table>
 </div>
+
+
 
 </body>
 </html>
