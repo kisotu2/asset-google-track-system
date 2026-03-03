@@ -168,7 +168,7 @@ tr:nth-child(even) { background:#f0f0f0; }
 .dropdown-content a:hover { background-color:#f1f1f1; }
 .dropdown:hover .dropdown-content { display:block; }
 
-a.logout { float:right; background:#dc3545; color:white; padding:8px 12px; border-radius:5px; text-decoration:none; }
+a.logout { float:right; background:linear-gradient(to right,#b08116,#99bb4f); color:white; padding:1px 2px; border-radius:5px; text-decoration:none; font-size: 25px;}
 .logout:hover { opacity:0.9; }
 
 /* Sections hidden by default */

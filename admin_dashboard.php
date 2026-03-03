@@ -102,7 +102,7 @@ th { background:#99bb4f; color:white; }
 button { padding:5px 10px; border:none; cursor:pointer; }
 .assign { background:#28a745; color:white; }
 .unassign { background:#dc3545; color:white; }
-.logout { float:right; background:#dc3545; color:white; padding:8px 12px; text-decoration:none; border-radius:5px; }
+.logout { float:right; background:linear-gradient(to right,#b08116,#99bb4f); color:white; padding:1px 2px; border-radius:5px; text-decoration:none; font-size: 25px;}
 .message { font-weight:bold; margin:10px 0; color:green; }
 select { padding:5px; }
 </style>

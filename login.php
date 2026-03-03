@@ -1,37 +1,24 @@
 <?php
 require 'db.php';
-require_once __DIR__ . '/vendor/autoload.php';
 
-use RobThree\Auth\TwoFactorAuth;
-use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
+// PHPMailer files
+require 'PHPMailer-master/src/PHPMailer.php';
+require 'PHPMailer-master/src/SMTP.php';
+require 'PHPMailer-master/src/Exception.php';
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 session_start();
 
-// Create QR provider
-$qrProvider = new BaconQrCodeProvider();
-
-// Initialize TwoFactorAuth with provider and app name
-$tfa = new TwoFactorAuth($qrProvider, 'IRA Asset System');
-
-$show2fa = false; 
 $error = "";
+$showOTP = false;
 
-// Step 0: Handle re-generate QR request
-if(isset($_POST['regenerate_qr'])){
-    if(isset($_SESSION['2fa_user'])){
-        $user = $_SESSION['2fa_user'];
-        $user['google_secret'] = $tfa->createSecret();
-        $stmt_update = $conn->prepare("UPDATE users SET google_secret=?, 2fa_confirmed=0 WHERE id=?");
-        $stmt_update->bind_param("si", $user['google_secret'], $user['id']);
-        $stmt_update->execute();
-        $_SESSION['2fa_user'] = $user;
-        $error = "New QR code generated. Scan it with Google Authenticator.";
-        $show2fa = true;
-    }
-}
-
-// Step 1: Handle login submission
+/* =====================================================
+   STEP 1: HANDLE EMAIL + PASSWORD LOGIN
+===================================================== */
 if(isset($_POST['login'])){
+
     $email = $_POST['email'];
     $password = $_POST['password'];
 
@@ -41,47 +28,92 @@ if(isset($_POST['login'])){
     $result = $stmt->get_result();
     $user = $result->fetch_assoc();
 
-    if($user && password_verify($password, $user['password'])){
-        // Create 2FA secret if missing
-        if(empty($user['google_secret'])){
-            $user['google_secret'] = $tfa->createSecret();
-            $stmt_update = $conn->prepare("UPDATE users SET google_secret=? WHERE id=?");
-            $stmt_update->bind_param("si", $user['google_secret'], $user['id']);
-            $stmt_update->execute();
-            $user['qr_required'] = true;
-        } else {
-            $user['qr_required'] = empty($user['2fa_confirmed']);
+    if($user && password_verify($password, $user['password']) && $user['status'] == 'active'){
+
+        // Generate 6-digit OTP
+        $otp = rand(100000, 999999);
+
+        // Store OTP and expiry (5 minutes)
+        $stmt_update = $conn->prepare("UPDATE users SET otp_code=?, otp_expiry=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=?");
+        $stmt_update->bind_param("ii", $otp, $user['id']);
+        $stmt_update->execute();
+
+        $_SESSION['otp_user_id'] = $user['id'];
+        $showOTP = true;
+
+        /* =====================================================
+           SEND EMAIL USING PHPMailer
+        ===================================================== */
+        $mail = new PHPMailer(true);
+
+        try{
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.gmail.com';
+            $mail->SMTPAuth   = true;
+            $mail->Username   = 'kisotusamuel2@gmail.com';
+            $mail->Password   = 'pgveakwibzlhicqs';
+            $mail->SMTPSecure = 'tls';
+            $mail->Port       = 587;
+
+            $mail->setFrom('kisotusamuel2@gmail.com', 'IRA Asset Management System');
+            $mail->addAddress($user['email'], $user['full_name']);
+
+            $mail->isHTML(true);
+            $mail->Subject = 'IRA Login Verification Code';
+            $mail->Body    = "
+                <h3>IRA Asset Management System</h3>
+                <p>Hello {$user['full_name']},</p>
+                <p>Your login verification code is:</p>
+                <h2 style='color:#b08116;'>$otp</h2>
+                <p>This code will expire in 5 minutes.</p>
+                <br>
+                <small>If you did not attempt to login, please ignore this email.</small>
+            ";
+
+            $mail->send();
+
+        } catch(Exception $e){
+            $error = "Failed to send verification email.";
         }
 
-        $_SESSION['2fa_user'] = $user;
-        $show2fa = true;
     } else {
         $error = "Invalid email or password.";
     }
 }
 
-// Step 2: Handle 2FA verification
-if(isset($_POST['verify_2fa'])){
-    if(!isset($_SESSION['2fa_user'])){
+/* =====================================================
+   STEP 2: HANDLE OTP VERIFICATION
+===================================================== */
+if(isset($_POST['verify_otp'])){
+
+    if(!isset($_SESSION['otp_user_id'])){
         header("Location: login.php");
         exit();
     }
 
-    $user = $_SESSION['2fa_user'];
-    $code = $_POST['code'];
+    $user_id = $_SESSION['otp_user_id'];
+    $entered_otp = $_POST['otp'];
 
-    if($tfa->verifyCode($user['google_secret'], $code)){
+    $stmt = $conn->prepare("SELECT * FROM users WHERE id=? AND otp_code=? AND otp_expiry > NOW()");
+    $stmt->bind_param("ii", $user_id, $entered_otp);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+
+    if($user){
+
+        // Clear OTP after successful login
+        $stmt_clear = $conn->prepare("UPDATE users SET otp_code=NULL, otp_expiry=NULL WHERE id=?");
+        $stmt_clear->bind_param("i", $user['id']);
+        $stmt_clear->execute();
+
         $_SESSION['user_id'] = $user['id'];
         $_SESSION['role']    = $user['role'];
         $_SESSION['name']    = $user['full_name'];
 
-        // Mark 2FA as confirmed
-        $stmt_update = $conn->prepare("UPDATE users SET 2fa_confirmed=1 WHERE id=?");
-        $stmt_update->bind_param("i", $user['id']);
-        $stmt_update->execute();
+        unset($_SESSION['otp_user_id']);
 
-        unset($_SESSION['2fa_user']);
-
+        // Redirect based on role
         if($user['role'] === 'super_admin'){
             header("Location: super_dashboard.php");
         } elseif($user['role'] === 'admin'){
@@ -90,24 +122,22 @@ if(isset($_POST['verify_2fa'])){
             header("Location: user_index.php");
         }
         exit();
+
     } else {
-        $error = "Invalid authentication code.";
-        $show2fa = true;
-        $user['qr_required'] = false; 
+        $error = "Invalid or expired verification code.";
+        $showOTP = true;
     }
 }
 
-// Show 2FA view if session exists
-if(isset($_SESSION['2fa_user'])){
-    $show2fa = true;
-    $user = $_SESSION['2fa_user'];
+if(isset($_SESSION['otp_user_id'])){
+    $showOTP = true;
 }
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
-<title>Login - IRA Asset Management</title>
+<title>IRA Asset Management System</title>
 <style>
 body{
     margin:0;
@@ -126,7 +156,7 @@ body{
     box-shadow:0 10px 30px rgba(0,0,0,0.2);
     text-align:center;
 }
-h2{color:#b08116;margin-bottom:20px;}
+h2{color:#b08116;}
 input{
     width:100%;
     padding:12px;
@@ -146,44 +176,34 @@ button{
 }
 button:hover{opacity:0.9;}
 .error{color:red;margin-bottom:15px;}
-.qr img{margin-top:10px;}
-.link{margin-top:10px;}
 </style>
 </head>
 <body>
 
 <div class="card">
 
-<?php if(!$show2fa): ?>
+<?php if(!$showOTP): ?>
+
 <h2>Login</h2>
 <?php if($error) echo "<p class='error'>$error</p>"; ?>
+
 <form method="POST">
 <input type="email" name="email" placeholder="Company Email" required>
 <input type="password" name="password" placeholder="Password" required>
 <button type="submit" name="login">Login</button>
 </form>
-<div class="link">
-<a href="register.php">Register as User</a>
-</div>
 
 <?php else: ?>
-<h2>Two-Factor Authentication</h2>
-<?php if($error) echo "<p class='error'>$error</p>"; ?>
 
-<?php if(!empty($user['google_secret']) && $user['qr_required']): ?>
-<p>Scan this QR code with Google Authenticator and enter the 6-digit code:</p>
-<div class="qr">
-<img src="<?php echo $tfa->getQRCodeImageAsDataUri($user['full_name'], $user['google_secret']); ?>" alt="QR Code">
-</div>
-<form method="POST" style="margin-bottom:10px;">
-<button type="submit" name="regenerate_qr">Re-generate QR</button>
-</form>
-<?php endif; ?>
+<h2>Email Verification</h2>
+<?php if($error) echo "<p class='error'>$error</p>"; ?>
+<p>A 6-digit verification code has been sent to your email.</p>
 
 <form method="POST">
-<input type="text" name="code" placeholder="6-digit code" required>
-<button type="submit" name="verify_2fa">Verify</button>
+<input type="text" name="otp" placeholder="Enter 6-digit code" required>
+<button type="submit" name="verify_otp">Verify</button>
 </form>
+
 <?php endif; ?>
 
 </div>
