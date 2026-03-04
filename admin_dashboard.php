@@ -64,6 +64,20 @@ while($row = $result->fetch_assoc()){
 }
 
 /* ===============================
+   FILTER LOGIC
+=================================*/
+$filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
+
+$whereClause = "";
+
+if($filter == 'assigned'){
+    $whereClause = "WHERE l.assigned_to IS NOT NULL";
+}
+elseif($filter == 'available'){
+    $whereClause = "WHERE l.assigned_to IS NULL";
+}
+
+/* ===============================
    FETCH LAPTOPS
 =================================*/
 $laptops = [];
@@ -71,12 +85,14 @@ $result2 = $conn->query("
     SELECT l.*, u.full_name 
     FROM laptops l
     LEFT JOIN users u ON l.assigned_to = u.id
+    $whereClause
     ORDER BY l.created_at DESC
 ");
 
 while($row = $result2->fetch_assoc()){
     $laptops[] = $row;
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -105,6 +121,10 @@ button { padding:5px 10px; border:none; cursor:pointer; }
 .logout { float:right; background:linear-gradient(to right,#b08116,#99bb4f); color:white; padding:1px 2px; border-radius:5px; text-decoration:none; font-size: 25px;}
 .message { font-weight:bold; margin:10px 0; color:green; }
 select { padding:5px; }
+
+.active-card {
+    border: 3px solid #b08116;
+}
 </style>
 </head>
 <body>
@@ -119,18 +139,28 @@ select { padding:5px; }
 
 <!-- STATISTICS -->
 <div class="card-container">
-    <div class="card">
-        <h2><?= $total_assets ?></h2>
-        <p>Total Laptops</p>
-    </div>
-    <div class="card">
-        <h2><?= $assigned_assets ?></h2>
-        <p>Assigned</p>
-    </div>
-    <div class="card">
-        <h2><?= $unassigned_assets ?></h2>
-        <p>Available</p>
-    </div>
+
+    <a href="?filter=all" style="text-decoration:none; color:inherit;">
+        <div class="card <?= $filter=='all'?'active-card':'' ?>">
+            <h2><?= $total_assets ?></h2>
+            <p>Total Laptops</p>
+        </div>
+    </a>
+
+    <a href="?filter=assigned" style="text-decoration:none; color:inherit;">
+        <div class="card <?= $filter=='assigned'?'active-card':'' ?>">
+            <h2><?= $assigned_assets ?></h2>
+            <p>Assigned</p>
+        </div>
+    </a>
+
+    <a href="?filter=available" style="text-decoration:none; color:inherit;">
+        <div class="card <?= $filter=='available'?'active-card':'' ?>">
+            <h2><?= $unassigned_assets ?></h2>
+            <p>Available</p>
+        </div>
+    </a>
+
 </div>
 
 <!-- LAPTOP TABLE -->

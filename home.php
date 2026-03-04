@@ -144,6 +144,74 @@ if(isset($_POST['verify_otp'])){
 if(isset($_SESSION['otp_user_id'])){
     $showOTP = true;
 }
+
+/* =====================================================
+   STEP 3: RESEND OTP
+===================================================== */
+if(isset($_POST['resend_otp'])){
+
+    if(!isset($_SESSION['otp_user_id'])){
+        header("Location: login.php");
+        exit();
+    }
+
+    $user_id = $_SESSION['otp_user_id'];
+
+    // Get user
+    $stmt = $conn->prepare("SELECT * FROM users WHERE id=? LIMIT 1");
+    $stmt->bind_param("i", $user_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if($result->num_rows === 1){
+
+        $user = $result->fetch_assoc();
+
+        // Generate NEW OTP
+        $new_otp = rand(100000, 999999);
+
+        // Update DB
+        $update = $conn->prepare("UPDATE users SET otp_code=?, otp_expiry=DATE_ADD(NOW(), INTERVAL 5 MINUTE) WHERE id=?");
+        $update->bind_param("ii", $new_otp, $user_id);
+        $update->execute();
+        $update->close();
+
+        // Send Email Again
+        $mail = new PHPMailer(true);
+
+        try{
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.gmail.com';
+            $mail->SMTPAuth   = true;
+            $mail->Username   = 'kisotusamuel2@gmail.com';
+            $mail->Password   = 'pgveakwibzlhicqs';
+            $mail->SMTPSecure = 'tls';
+            $mail->Port       = 587;
+
+            $mail->setFrom('kisotusamuel2@gmail.com', 'IRA Asset Management System');
+            $mail->addAddress($user['email'], $user['full_name']);
+
+            $mail->isHTML(true);
+            $mail->Subject = 'IRA Login Verification Code (Resent)';
+            $mail->Body = "
+                <h3>IRA Asset Management System</h3>
+                <p>Hello {$user['full_name']},</p>
+                <p>Your NEW verification code is:</p>
+                <h2 style='color:#b08116;'>$new_otp</h2>
+                <p>This code expires in 5 minutes.</p>
+            ";
+
+            $mail->send();
+
+        } catch(Exception $e){
+            $error = "Failed to resend verification email.";
+        }
+
+        $showOTP = true;
+    }
+
+    $stmt->close();
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">

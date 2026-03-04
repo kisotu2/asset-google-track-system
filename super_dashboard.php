@@ -49,41 +49,72 @@ if(isset($_POST['add_admin'])){
 // --- Handle Asset Registration ---
 if(isset($_POST['add_asset'])){
 
-    $asset_tag      = $_POST['asset_tag'];
-    $serial_number  = $_POST['serial_number'];
-    $brand          = $_POST['brand'];
-    $model          = $_POST['model'];
-    $department     = "ICT";
-    $assigned_to    = NULL;  // 👈 always null
-    $status         = $_POST['status'];
-    $purchase_date  = $_POST['purchase_date'] ?: NULL;
-    $warranty_expiry= $_POST['warranty_expiry'] ?: NULL;
+    if(!empty($_POST['asset_tag']) && !empty($_POST['serial_number'])){
 
-    $stmt = $conn->prepare("
-        INSERT INTO laptops
-        (asset_tag,serial_number,brand,model,department,assigned_to,status,purchase_date,warranty_expiry)
-        VALUES (?,?,?,?,?,?,?,?,?)
-    ");
+        $asset_tag      = $_POST['asset_tag'];
+        $serial_number  = $_POST['serial_number'];
+        $brand          = $_POST['brand'];
+        $model          = $_POST['model'];
+        $department     = "ICT";
+        $assigned_to    = NULL;
+        $status         = $_POST['status'];
+        $purchase_date  = $_POST['purchase_date'] ?: NULL;
+        $warranty_expiry= $_POST['warranty_expiry'] ?: NULL;
 
-    $stmt->bind_param(
-        "sssssisss",
-        $asset_tag,
-        $serial_number,
-        $brand,
-        $model,
-        $department,
-        $assigned_to,
-        $status,
-        $purchase_date,
-        $warranty_expiry
-    );
+        $stmt = $conn->prepare("
+            INSERT INTO laptops
+            (asset_tag,serial_number,brand,model,department,assigned_to,status,purchase_date,warranty_expiry)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        ");
 
-    $stmt->execute();
-    $message = "Asset added successfully!";
-}
-     else {
+        $stmt->bind_param(
+            "sssssisss",
+            $asset_tag,
+            $serial_number,
+            $brand,
+            $model,
+            $department,
+            $assigned_to,
+            $status,
+            $purchase_date,
+            $warranty_expiry
+        );
+
+        $stmt->execute();
+        $message = "Asset added successfully!";
+
+    } else {
         $message = "Asset Tag and Serial Number required!";
     }
+}
+
+// --- Handle Change Role ---
+if(isset($_POST['change_role'])){
+
+    $user_id = $_POST['change_role'];
+    $new_role = $_POST['new_role'];
+    $super_pass = $_POST['password'];
+
+    // Verify super admin password
+    $stmt = $conn->prepare("SELECT password FROM users WHERE role='super_admin' AND email=?");
+    $stmt->bind_param("s", $_SESSION['user_email']);
+    $stmt->execute();
+    $stmt->bind_result($hashed_super_pass);
+    $stmt->fetch();
+    $stmt->close();
+
+    if(!password_verify($super_pass, $hashed_super_pass)){
+        $message = "Invalid super admin password!";
+    } else {
+
+        $update = $conn->prepare("UPDATE users SET role=? WHERE id=?");
+        $update->bind_param("si", $new_role, $user_id);
+        $update->execute();
+
+        $message = "Role updated successfully!";
+    }
+}
+
 
 // --- Fetch users
 $users = [];
@@ -94,7 +125,11 @@ while($row = $result->fetch_assoc()){
 
 // --- Fetch ICT assets
 $assets = [];
-$result2 = $conn->query("SELECT * FROM laptops WHERE department='ICT' ORDER BY created_at DESC");
+$result2 = $conn->query("SELECT laptops.*, users.full_name 
+    FROM laptops
+    LEFT JOIN users ON laptops.assigned_to = users.id
+    WHERE laptops.department='ICT'
+    ORDER BY laptops.created_at DESC");
 while($row = $result2->fetch_assoc()){
     $assets[] = $row;
 }
@@ -216,7 +251,6 @@ function showSection(id){
 <input type="text" name="full_name" placeholder="Full Name" required>
 <input type="email" name="email" placeholder="Email" required>
 <input type="password" name="password" placeholder="Password" required>
-<input type="password" name="super_password" placeholder="Enter Your Super Admin Password" required>
 <button type="submit" name="add_admin">Add Admin</button>
 </form>
 </div>
