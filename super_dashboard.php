@@ -2,139 +2,45 @@
 require 'db.php';
 session_start();
 
-// Only super admin
+// Only super admin can access
 if(!isset($_SESSION['role']) || $_SESSION['role'] != 'super_admin'){
     header("Location: login.php");
     exit();
 }
 
-// Messages
 $message = "";
 
-// --- Handle Add Admin ---
+/* ===============================
+   ADD ADMIN
+=================================*/
 if(isset($_POST['add_admin'])){
-    $full_name = $_POST['full_name'];
-    $email     = $_POST['email'];
+
+    $full_name = trim($_POST['full_name']);
+    $email     = trim($_POST['email']);
     $password  = password_hash($_POST['password'], PASSWORD_DEFAULT);
     $role      = "admin";
     $status    = "active";
-    $super_pass = $_POST['super_password'] ?? '';
 
-    // Validate super admin password
-    $stmt = $conn->prepare("SELECT password FROM users WHERE role='super_admin' AND email=?");
-    $stmt->bind_param("s", $_SESSION['user_email']);
-    $stmt->execute();
-    $stmt->bind_result($hashed_super_pass);
-    $stmt->fetch();
-    $stmt->close();
+    $check = $conn->prepare("SELECT id FROM users WHERE email=?");
+    $check->bind_param("s",$email);
+    $check->execute();
+    $check->store_result();
 
-    if(!password_verify($super_pass, $hashed_super_pass)){
-        $message = "Invalid super admin password!";
+    if($check->num_rows>0){
+        $message = "Email already exists!";
     } else {
-        $check = $conn->prepare("SELECT * FROM users WHERE email=?");
-        $check->bind_param("s",$email);
-        $check->execute();
-        $check->store_result();
-        if($check->num_rows>0){
-            $message = "Email already exists!";
-        } else {
-            $stmt = $conn->prepare("INSERT INTO users (full_name,email,password,role,status) VALUES (?,?,?,?,?)");
-            $stmt->bind_param("sssss",$full_name,$email,$password,$role,$status);
-            $stmt->execute();
-            $message = "Admin added successfully!";
-        }
-    }
-}
-
-// --- Handle Asset Registration ---
-if(isset($_POST['add_asset'])){
-
-    if(!empty($_POST['asset_tag']) && !empty($_POST['serial_number'])){
-
-        $asset_tag      = $_POST['asset_tag'];
-        $serial_number  = $_POST['serial_number'];
-        $brand          = $_POST['brand'];
-        $model          = $_POST['model'];
-        $department     = "ICT";
-        $assigned_to    = NULL;
-        $status         = $_POST['status'];
-        $purchase_date  = $_POST['purchase_date'] ?: NULL;
-        $warranty_expiry= $_POST['warranty_expiry'] ?: NULL;
-
-        $stmt = $conn->prepare("
-            INSERT INTO laptops
-            (asset_tag,serial_number,brand,model,department,assigned_to,status,purchase_date,warranty_expiry)
-            VALUES (?,?,?,?,?,?,?,?,?)
-        ");
-
-        $stmt->bind_param(
-            "sssssisss",
-            $asset_tag,
-            $serial_number,
-            $brand,
-            $model,
-            $department,
-            $assigned_to,
-            $status,
-            $purchase_date,
-            $warranty_expiry
-        );
-
+        $stmt = $conn->prepare("INSERT INTO users (full_name,email,password,role,status) VALUES (?,?,?,?,?)");
+        $stmt->bind_param("sssss",$full_name,$email,$password,$role,$status);
         $stmt->execute();
-        $message = "Asset added successfully!";
-
-    } else {
-        $message = "Asset Tag and Serial Number required!";
+        $message = "Admin added successfully!";
     }
+
+    $check->close();
 }
 
-// --- Handle Change Role ---
-if(isset($_POST['change_role'])){
-
-    $user_id = $_POST['change_role'];
-    $new_role = $_POST['new_role'];
-    $super_pass = $_POST['password'];
-
-    // Verify super admin password
-    $stmt = $conn->prepare("SELECT password FROM users WHERE role='super_admin' AND email=?");
-    $stmt->bind_param("s", $_SESSION['user_email']);
-    $stmt->execute();
-    $stmt->bind_result($hashed_super_pass);
-    $stmt->fetch();
-    $stmt->close();
-
-    if(!password_verify($super_pass, $hashed_super_pass)){
-        $message = "Invalid super admin password!";
-    } else {
-
-        $update = $conn->prepare("UPDATE users SET role=? WHERE id=?");
-        $update->bind_param("si", $new_role, $user_id);
-        $update->execute();
-
-        $message = "Role updated successfully!";
-    }
-}
-
-
-// --- Fetch users
-$users = [];
-$result = $conn->query("SELECT * FROM users ORDER BY role DESC");
-while($row = $result->fetch_assoc()){
-    $users[] = $row;
-}
-
-// --- Fetch ICT assets
-$assets = [];
-$result2 = $conn->query("SELECT laptops.*, users.full_name 
-    FROM laptops
-    LEFT JOIN users ON laptops.assigned_to = users.id
-    WHERE laptops.department='ICT'
-    ORDER BY laptops.created_at DESC");
-while($row = $result2->fetch_assoc()){
-    $assets[] = $row;
-}
-
-// --- Handle Register User ---
+/* ===============================
+   REGISTER USER
+=================================*/
 if(isset($_POST['register_user'])){
 
     $full_name = trim($_POST['full_name']);
@@ -172,9 +78,91 @@ if(isset($_POST['register_user'])){
         $message = "All fields are required!";
     }
 }
+
+/* ===============================
+   CHANGE USER ROLE
+=================================*/
+if(isset($_POST['change_role'])){
+
+    $user_id = intval($_POST['change_role']);
+    $new_role = $_POST['new_role'];
+
+    $update = $conn->prepare("UPDATE users SET role=? WHERE id=?");
+    $update->bind_param("si", $new_role, $user_id);
+    $update->execute();
+
+    $message = "Role updated successfully!";
+}
+
+/* ===============================
+   ADD ICT ASSET
+=================================*/
+if(isset($_POST['add_asset'])){
+
+    if(!empty($_POST['asset_tag']) && !empty($_POST['serial_number'])){
+
+        $asset_tag      = trim($_POST['asset_tag']);
+        $serial_number  = trim($_POST['serial_number']);
+        $brand          = trim($_POST['brand']);
+        $model          = trim($_POST['model']);
+        $department     = "ICT";
+        $assigned_to    = NULL;
+        $status         = $_POST['status'];
+        $purchase_date  = $_POST['purchase_date'] ?: NULL;
+        $warranty_expiry= $_POST['warranty_expiry'] ?: NULL;
+
+        $stmt = $conn->prepare("
+            INSERT INTO laptops
+            (asset_tag,serial_number,brand,model,department,assigned_to,status,purchase_date,warranty_expiry)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        ");
+
+        $stmt->bind_param(
+            "sssssisss",
+            $asset_tag,
+            $serial_number,
+            $brand,
+            $model,
+            $department,
+            $assigned_to,
+            $status,
+            $purchase_date,
+            $warranty_expiry
+        );
+
+        $stmt->execute();
+        $message = "Asset added successfully!";
+
+    } else {
+        $message = "Asset Tag and Serial Number required!";
+    }
+}
+
+/* ===============================
+   FETCH USERS
+=================================*/
+$users = [];
+$result = $conn->query("SELECT * FROM users ORDER BY role DESC");
+while($row = $result->fetch_assoc()){
+    $users[] = $row;
+}
+
+/* ===============================
+   FETCH ICT ASSETS
+=================================*/
+$assets = [];
+$result2 = $conn->query("
+    SELECT laptops.*, users.full_name 
+    FROM laptops
+    LEFT JOIN users ON laptops.assigned_to = users.id
+    WHERE laptops.department='ICT'
+    ORDER BY laptops.created_at DESC
+");
+
+while($row = $result2->fetch_assoc()){
+    $assets[] = $row;
+}
 ?>
-
-
 
 <!DOCTYPE html>
 <html>
@@ -285,13 +273,14 @@ function showSection(id){
 <td><?= htmlspecialchars($u['status']) ?></td>
 <td>
 <?php if($u['role'] != 'super_admin'): ?>
-<form method="POST" action="">
-<select name="new_role">
-    <option value="user" <?= $u['role']=='user'?'selected':'' ?>>User</option>
-    <option value="admin" <?= $u['role']=='admin'?'selected':'' ?>>Admin</option>
-</select>
-<input type="password" name="super_password" placeholder="Enter Your Super Admin Password" required>
-<button type="submit" name="change_role" value="<?= $u['id'] ?>">Update Role</button>
+<form method="POST">
+    <select name="new_role">
+        <option value="user" <?= $u['role']=='user'?'selected':'' ?>>User</option>
+        <option value="admin" <?= $u['role']=='admin'?'selected':'' ?>>Admin</option>
+    </select>
+    <button type="submit" name="change_role" value="<?= $u['id'] ?>">
+        Update Role
+    </button>
 </form>
 <?php else: ?>
 N/A

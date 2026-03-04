@@ -12,29 +12,63 @@ if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
 
 $message = "";
 
-/* ===============================
-   ASSIGN LAPTOP
-=================================*/
+$admin_id = $_SESSION['user_id'];
+
+/* ================= ASSIGN ================= */
 if(isset($_POST['assign_laptop'])){
     $laptop_id = intval($_POST['laptop_id']);
-    $user_id   = intval($_POST['user_id']);
+    $new_user_id = intval($_POST['user_id']);
 
-    $stmt = $conn->prepare("UPDATE laptops SET assigned_to=? WHERE id=? AND assigned_to IS NULL");
-    $stmt->bind_param("ii",$user_id,$laptop_id);
+    // Check current owner
+    $check = $conn->prepare("SELECT assigned_to FROM laptops WHERE id=?");
+    $check->bind_param("i",$laptop_id);
+    $check->execute();
+    $old = $check->get_result()->fetch_assoc();
+    $old_user_id = $old['assigned_to'];
+
+    // If laptop already assigned, record REASSIGNED
+    if($old_user_id){
+        $history = $conn->prepare("INSERT INTO laptop_history 
+            (laptop_id,user_id,admin_id,action_type) 
+            VALUES (?,?,?,'Reassigned')");
+        $history->bind_param("iii",$laptop_id,$old_user_id,$admin_id);
+        $history->execute();
+    }
+
+    // Update laptop
+    $stmt = $conn->prepare("UPDATE laptops SET assigned_to=? WHERE id=?");
+    $stmt->bind_param("ii",$new_user_id,$laptop_id);
     $stmt->execute();
+
+    // Record Assigned
+    $history = $conn->prepare("INSERT INTO laptop_history 
+        (laptop_id,user_id,admin_id,action_type) 
+        VALUES (?,?,?,'Assigned')");
+    $history->bind_param("iii",$laptop_id,$new_user_id,$admin_id);
+    $history->execute();
 
     $message = "Laptop assigned successfully!";
 }
 
-/* ===============================
-   UNASSIGN LAPTOP
-=================================*/
+/* ================= UNASSIGN ================= */
 if(isset($_POST['unassign_laptop'])){
     $laptop_id = intval($_POST['laptop_id']);
+
+    $getUser = $conn->prepare("SELECT assigned_to FROM laptops WHERE id=?");
+    $getUser->bind_param("i",$laptop_id);
+    $getUser->execute();
+    $result = $getUser->get_result()->fetch_assoc();
+    $user_id = $result['assigned_to'];
 
     $stmt = $conn->prepare("UPDATE laptops SET assigned_to=NULL WHERE id=?");
     $stmt->bind_param("i",$laptop_id);
     $stmt->execute();
+
+    $history = $conn->prepare("INSERT INTO laptop_history 
+        (laptop_id,user_id,admin_id,action_type) 
+        VALUES (?,?,?,'Unassigned')");
+    $history->bind_param("iii",$laptop_id,$user_id,$admin_id);
+    $history->execute();
 
     $message = "Laptop unassigned successfully!";
 }
@@ -67,7 +101,6 @@ while($row = $result->fetch_assoc()){
    FILTER LOGIC
 =================================*/
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
-
 $whereClause = "";
 
 if($filter == 'assigned'){
@@ -92,13 +125,13 @@ $result2 = $conn->query("
 while($row = $result2->fetch_assoc()){
     $laptops[] = $row;
 }
-
 ?>
 
 <!DOCTYPE html>
 <html>
 <head>
 <title>Admin Dashboard</title>
+
 <style>
 body { font-family: Arial; background:#f4f6f9; margin:2rem; }
 h1 { color:#b08116; }
@@ -120,16 +153,50 @@ button { padding:5px 10px; border:none; cursor:pointer; }
 .unassign { background:#dc3545; color:white; }
 .logout { float:right; background:linear-gradient(to right,#b08116,#99bb4f); color:white; padding:1px 2px; border-radius:5px; text-decoration:none; font-size: 25px;}
 .message { font-weight:bold; margin:10px 0; color:green; }
-select { padding:5px; }
 
-.active-card {
-    border: 3px solid #b08116;
+.active-card { border: 3px solid #b08116; }
+
+/* ================= SEARCHABLE DROPDOWN ================= */
+.user-search-container {
+    position: relative;
+    width: 200px;
+    display: inline-block;
+}
+
+.user-search-input {
+    width: 100%;
+    padding: 6px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.user-search-list {
+    position: absolute;
+    width: 100%;
+    max-height: 150px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #ccc;
+    border-top: none;
+    display: none;
+    z-index: 999;
+}
+
+.user-option {
+    padding: 8px;
+    cursor: pointer;
+}
+
+.user-option:hover {
+    background: #f4f6f9;
 }
 </style>
 </head>
+
 <body>
 
-<h1>Admin Dashboard
+<h1>
+Admin Dashboard
 <a href="logout.php" class="logout">Logout</a>
 </h1>
 
@@ -139,7 +206,6 @@ select { padding:5px; }
 
 <!-- STATISTICS -->
 <div class="card-container">
-
     <a href="?filter=all" style="text-decoration:none; color:inherit;">
         <div class="card <?= $filter=='all'?'active-card':'' ?>">
             <h2><?= $total_assets ?></h2>
@@ -160,11 +226,10 @@ select { padding:5px; }
             <p>Available</p>
         </div>
     </a>
-
 </div>
 
-<!-- LAPTOP TABLE -->
 <h2>ICT Assets</h2>
+
 <table>
 <tr>
 <th>Asset Tag</th>
@@ -183,24 +248,36 @@ select { padding:5px; }
 <td><?= htmlspecialchars($lap['brand']) ?></td>
 <td><?= htmlspecialchars($lap['model']) ?></td>
 <td><?= htmlspecialchars($lap['status']) ?></td>
-<td>
-<?= $lap['full_name'] ? htmlspecialchars($lap['full_name']) : 'Unassigned' ?>
-</td>
+<td><?= $lap['full_name'] ? htmlspecialchars($lap['full_name']) : 'Unassigned' ?></td>
 <td>
 
 <?php if(!$lap['assigned_to']): ?>
 <form method="POST" style="display:inline;">
 <input type="hidden" name="laptop_id" value="<?= $lap['id'] ?>">
-<select name="user_id" required>
-<option value="">Select User</option>
-<?php foreach($available_users as $user): ?>
-<option value="<?= $user['id'] ?>">
-<?= htmlspecialchars($user['full_name']) ?>
-</option>
-<?php endforeach; ?>
-</select>
+
+<div class="user-search-container">
+    <input type="text"
+           placeholder="Type to search user..."
+           class="user-search-input"
+           onkeyup="filterUsers(this)"
+           autocomplete="off">
+
+    <div class="user-search-list">
+        <?php foreach($available_users as $user): ?>
+            <div class="user-option"
+                 data-id="<?= $user['id'] ?>"
+                 onclick="selectUser(this)">
+                <?= htmlspecialchars($user['full_name']) ?>
+            </div>
+        <?php endforeach; ?>
+    </div>
+
+    <input type="hidden" name="user_id" required>
+</div>
+
 <button type="submit" name="assign_laptop" class="assign">Assign</button>
 </form>
+
 <?php else: ?>
 <form method="POST" style="display:inline;">
 <input type="hidden" name="laptop_id" value="<?= $lap['id'] ?>">
@@ -212,6 +289,40 @@ select { padding:5px; }
 </tr>
 <?php endforeach; ?>
 </table>
+
+<script>
+function filterUsers(input) {
+    const container = input.parentElement;
+    const list = container.querySelector(".user-search-list");
+    const options = list.querySelectorAll(".user-option");
+
+    let filter = input.value.toLowerCase();
+    list.style.display = "block";
+
+    options.forEach(option => {
+        let text = option.textContent.toLowerCase();
+        option.style.display = text.includes(filter) ? "block" : "none";
+    });
+}
+
+function selectUser(element) {
+    const container = element.closest(".user-search-container");
+    const input = container.querySelector(".user-search-input");
+    const hiddenInput = container.querySelector("input[type=hidden]");
+    const list = container.querySelector(".user-search-list");
+
+    input.value = element.textContent;
+    hiddenInput.value = element.getAttribute("data-id");
+    list.style.display = "none";
+}
+
+document.addEventListener("click", function(e){
+    if(!e.target.closest(".user-search-container")){
+        document.querySelectorAll(".user-search-list")
+            .forEach(list => list.style.display="none");
+    }
+});
+</script>
 
 </body>
 </html>
