@@ -11,52 +11,85 @@ if (!isset($_SESSION['role'])) {
 }
 
 /* =====================================================
-   INITIALIZE FILTER VARIABLES
+   FILTER VARIABLES
 ===================================================== */
-$where  = "WHERE 1=1";
+
+$laptopWhere = "WHERE 1=1";
+$softwareWhere = "WHERE 1=1";
+
 $params = [];
 $types  = "";
 
 /* =====================================================
    FILTER: USER NAME
 ===================================================== */
+
 if (!empty($_GET['user_name'])) {
+
     $userName = trim($_GET['user_name']);
-    $where .= " AND u.full_name LIKE ?";
+
+    $laptopWhere .= " AND u.full_name LIKE ?";
+    $softwareWhere .= " AND u.full_name LIKE ?";
+
     $params[] = "%{$userName}%";
-    $types .= "s";
+    $params[] = "%{$userName}%";
+
+    $types .= "ss";
 }
 
 /* =====================================================
    FILTER: DATE RANGE
 ===================================================== */
+
 if (!empty($_GET['from']) && !empty($_GET['to'])) {
+
     $from = $_GET['from'] . " 00:00:00";
     $to   = $_GET['to'] . " 23:59:59";
 
-    $where .= " AND h.action_date BETWEEN ? AND ?";
+    $laptopWhere .= " AND h.action_date BETWEEN ? AND ?";
+    $softwareWhere .= " AND sh.action_date BETWEEN ? AND ?";
+
     $params[] = $from;
     $params[] = $to;
-    $types .= "ss";
+    $params[] = $from;
+    $params[] = $to;
+
+    $types .= "ssss";
 }
 
 /* =====================================================
    MAIN HISTORY QUERY
 ===================================================== */
+
 $query = "
-SELECT 
-    h.id,
-    h.action_type,
-    h.action_date,
+
+SELECT
     l.asset_tag,
     u.full_name AS user_name,
-    a.full_name AS admin_name
+    a.full_name AS admin_name,
+    h.action_type,
+    h.action_date
 FROM laptop_history h
 LEFT JOIN laptops l ON h.laptop_id = l.id
 LEFT JOIN users u ON h.user_id = u.id
 LEFT JOIN users a ON h.admin_id = a.id
-{$where}
-ORDER BY h.action_date DESC
+{$laptopWhere}
+
+UNION ALL
+
+SELECT
+    s.software_name AS asset_tag,
+    u.full_name AS user_name,
+    a.full_name AS admin_name,
+    sh.action_type,
+    sh.action_date
+FROM software_history sh
+LEFT JOIN softwares s ON sh.software_id = s.id
+LEFT JOIN users u ON sh.user_id = u.id
+LEFT JOIN users a ON sh.admin_id = a.id
+{$softwareWhere}
+
+ORDER BY action_date DESC
 ";
 
 $stmt = $conn->prepare($query);
@@ -69,34 +102,33 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 /* =====================================================
-   CHART DATA (RESPECTING FILTERS)
+   CHART DATA
 ===================================================== */
+
 $chartQuery = "
-SELECT h.action_type, COUNT(*) AS total
-FROM laptop_history h
-LEFT JOIN users u ON h.user_id = u.id
-{$where}
-GROUP BY h.action_type
+SELECT action_type, COUNT(*) AS total
+FROM laptop_history
+GROUP BY action_type
 ";
 
-$chartStmt = $conn->prepare($chartQuery);
-
-if (!empty($params)) {
-    $chartStmt->bind_param($types, ...$params);
-}
-
-$chartStmt->execute();
-$chartResult = $chartStmt->get_result();
+$chartResult = $conn->query($chartQuery);
 
 $chartData = [];
+
 while ($row = $chartResult->fetch_assoc()) {
     $chartData[$row['action_type']] = $row['total'];
 }
 
 /* =====================================================
-   LOAD USER LIST FOR FILTER DROPDOWN
+   LOAD USERS FOR FILTER
 ===================================================== */
-$userList = $conn->query("SELECT DISTINCT full_name FROM users WHERE role='user' ORDER BY full_name ASC");
+
+$userList = $conn->query("
+SELECT DISTINCT full_name 
+FROM users 
+WHERE role='user'
+ORDER BY full_name
+");
 ?>
 
 <!DOCTYPE html>

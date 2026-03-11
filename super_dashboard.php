@@ -134,12 +134,35 @@ function showSection(sectionId){
 
 <div class="sidebar">
 <h2>IRA SYSTEM</h2>
-<a href="#" onclick="showSection('dashboard')"><i class="fa fa-chart-line"></i> Dashboard</a>
-<a href="#" onclick="showSection('addAdmin')"><i class="fa fa-user-shield"></i> Add Admin</a>
-<a href="#" onclick="showSection('registerUser')"><i class="fa fa-user"></i> Register User</a>
-<a href="#" onclick="showSection('addAsset')"><i class="fa fa-laptop"></i> Add Asset</a>
-<a href="software_dashboard.php"><i class="fa fa-box"></i> Software Monitoring</a>
-<a href="logout.php"><i class="fa fa-sign-out-alt"></i> Logout</a>
+
+<a href="#" onclick="showSection('dashboard')">
+<i class="fa fa-chart-line"></i> Dashboard
+</a>
+
+<a href="#" onclick="showSection('addAdmin')">
+<i class="fa fa-user-shield"></i> Add Admin
+</a>
+
+<a href="#" onclick="showSection('registerUser')">
+<i class="fa fa-user"></i> Register User
+</a>
+
+<a href="#" onclick="showSection('addAsset')">
+<i class="fa fa-laptop"></i> Add Asset
+</a>
+
+<a href="software_dashboard.php">
+<i class="fa fa-box"></i> Software Monitoring
+</a>
+
+<a href="issue_software.php">
+<i class="fa fa-key"></i> Laptop Issue
+</a>
+
+<a href="logout.php">
+<i class="fa fa-sign-out-alt"></i> Logout
+</a>
+
 </div>
 
 <div class="main">
