@@ -13,7 +13,7 @@ if(!isset($_SESSION['role']) || ($_SESSION['role'] != 'admin' && $_SESSION['role
 $message="";
 
 /* ===============================
-// ADD SOFTWARE LOGIC (same as your previous code)
+   ADD SOFTWARE LOGIC
 =================================*/
 if(isset($_POST['add_software'])){
     $name = trim($_POST['software_name']);
@@ -47,6 +47,35 @@ if(isset($_POST['add_software'])){
 }
 
 /* ===============================
+   RENEW LICENSE LOGIC
+=================================*/
+if(isset($_POST['renew_license'])){
+    $id = $_POST['license_id'];
+    $new_expiry = $_POST['new_expiry_date'];
+    $stmt = $conn->prepare("UPDATE softwares SET expiry_date=? WHERE id=?");
+    $stmt->bind_param("si", $new_expiry, $id);
+    if($stmt->execute()){
+        $message = "✅ License renewed successfully";
+    }else{
+        $message = "❌ Error renewing license";
+    }
+}
+
+/* ===============================
+   DELETE LICENSE LOGIC
+=================================*/
+if(isset($_POST['delete_license'])){
+    $id = $_POST['license_id'];
+    $stmt = $conn->prepare("DELETE FROM softwares WHERE id=?");
+    $stmt->bind_param("i", $id);
+    if($stmt->execute()){
+        $message = "✅ License deleted successfully";
+    }else{
+        $message = "❌ Error deleting license";
+    }
+}
+
+/* ===============================
    FETCH SOFTWARES AND STATS
 =================================*/
 $today=date("Y-m-d");
@@ -55,6 +84,7 @@ $warning=date("Y-m-d",strtotime("+30 days"));
 $total=$conn->query("SELECT COUNT(*) as t FROM softwares")->fetch_assoc()['t'];
 $expired=$conn->query("SELECT COUNT(*) as t FROM softwares WHERE expiry_date<'$today'")->fetch_assoc()['t'];
 $expiring=$conn->query("SELECT COUNT(*) as t FROM softwares WHERE expiry_date BETWEEN '$today' AND '$warning'")->fetch_assoc()['t'];
+$available=$conn->query("SELECT COUNT(*) as t FROM softwares WHERE expiry_date >= '$today'")->fetch_assoc()['t'];
 
 $alerts=$conn->query("SELECT software_name,expiry_date FROM softwares WHERE expiry_date BETWEEN '$today' AND '$warning'");
 
@@ -73,56 +103,86 @@ $result=$conn->query("SELECT * FROM softwares $where ORDER BY expiry_date ASC");
 <html>
 <head>
 <title>IRA Software Dashboard</title>
-
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
 <style>
+/* BODY & RESET */
 body{
     font-family: 'Segoe UI', Arial, sans-serif;
     margin:0;
     background:#f4f6f9;
+    display:flex;
+}
+
+/* SIDEBAR */
+.sidebar{
+    width:220px;
+    background:linear-gradient(180deg,#99bb4f,#b08116);
+    color:white;
+    height:100vh;
+    position:fixed;
+    top:0;
+    left:0;
+    display:flex;
+    flex-direction:column;
+}
+.sidebar h2{
+    text-align:center;
+    padding:20px 0;
+    font-size:20px;
+    border-bottom:1px solid rgba(255,255,255,0.2);
+}
+.sidebar a{
+    padding:15px 20px;
+    color:white;
+    text-decoration:none;
+    font-size:16px;
+    border-bottom:1px solid rgba(255,255,255,0.1);
+    transition:0.2s;
+    cursor:pointer;
+}
+.sidebar a:hover{
+    background:#1d2731;
+}
+
+/* MAIN CONTENT */
+.main{
+    margin-left:220px;
+    width:calc(100% - 220px);
+    padding:20px 30px;
 }
 
 /* HEADER */
 .header{
-    background: linear-gradient(90deg, #b08116, #99bb4f);
-    color:white;
-    padding:20px 30px;
     font-size:24px;
     font-weight:bold;
-    box-shadow:0 4px 8px rgba(0,0,0,0.1);
+    color:#333;
+    margin-bottom:25px;
 }
 
-/* CONTAINER */
-.container{
-    width:95%;
-    margin:auto;
-    padding:25px;
-}
-
-/* CARDS */
-.dashboard{
+/* DASHBOARD CARDS */
+.cards{
     display:flex;
     gap:20px;
+    flex-wrap:wrap;
     margin-bottom:30px;
 }
-
 .card{
     flex:1;
-    background:linear-gradient(145deg, #b08116, #99bb4f);
-    padding:25px;
+    min-width:180px;
+    background:#99bb4f;
+    padding:20px;
     border-radius:12px;
     color:white;
-    box-shadow:0 4px 15px rgba(0,0,0,0.15);
-    transition:0.3s;
     text-align:center;
+    box-shadow:0 4px 12px rgba(0,0,0,0.1);
+    transition:0.3s;
 }
 .card:hover{
     transform:translateY(-5px);
 }
 .card h3{
     margin:0 0 10px 0;
-    font-size:18px;
+    font-size:16px;
 }
 .card p{
     font-size:28px;
@@ -173,13 +233,6 @@ button:hover{
     background:#b08116;
 }
 
-/* SEARCH */
-.search input, .search select{
-    display:inline-block;
-    width:auto;
-    margin-right:10px;
-}
-
 /* TABLE */
 table{
     width:100%;
@@ -201,41 +254,61 @@ th{
 tr:hover{
     background:#f1f1f1;
 }
+.active-text{ color:green; font-weight:bold; }
+.expired-text{ color:red; font-weight:bold; }
+.delete{ color:red; text-decoration:none; font-weight:bold; }
 
-.active-text{
-    color:green;
-    font-weight:bold;
+/* MODALS */
+.modal{
+    display:none;
+    position:fixed;
+    z-index:1000;
+    left:0; top:0;
+    width:100%; height:100%;
+    overflow:auto;
+    background:rgba(0,0,0,0.5);
 }
-.expired-text{
-    color:red;
-    font-weight:bold;
+.modal-content{
+    background:white;
+    margin:10% auto;
+    padding:20px;
+    border-radius:10px;
+    width:400px;
+    position:relative;
 }
-.delete{
-    color:red;
-    text-decoration:none;
-    font-weight:bold;
+.close{
+    position:absolute;
+    top:10px; right:15px;
+    font-size:22px;
+    cursor:pointer;
+    color:#333;
 }
 </style>
-
 </head>
 <body>
 
-<div class="header">
-<i class="fa fa-box"></i> IRA Software Subscription Dashboard
+<!-- SIDEBAR -->
+<div class="sidebar">
+<h2>License Management</h2>
+<a onclick="openModal('addModal')"><i class="fa fa-plus-circle"></i> Add License</a>
+<a onclick="openModal('renewModal')"><i class="fa fa-sync-alt"></i> Renew License</a>
+<a onclick="openModal('deleteModal')"><i class="fa fa-trash"></i> Delete License</a>
+<a href="#reports"><i class="fa fa-chart-line"></i> Reports</a>
 </div>
 
-<div class="container">
+<!-- MAIN CONTENT -->
+<div class="main">
+
+<div class="header"><i class="fa fa-box"></i> IRA Software Subscription Dashboard</div>
 
 <?php if($message){ ?>
-<div class="alert">
-    <?php echo $message; ?>
-</div>
+<div class="alert"><?php echo $message; ?></div>
 <?php } ?>
 
 <!-- DASHBOARD CARDS -->
-<div class="dashboard">
+<div class="cards">
     <div class="card">
-        <h3>Total Software</h3>
+        <h3>Total Licenses</h3>
         <p><?php echo $total; ?></p>
     </div>
     <div class="card">
@@ -245,6 +318,10 @@ tr:hover{
     <div class="card">
         <h3>Expired</h3>
         <p><?php echo $expired; ?></p>
+    </div>
+    <div class="card">
+        <h3>Available</h3>
+        <p><?php echo $available; ?></p>
     </div>
 </div>
 
@@ -260,40 +337,6 @@ tr:hover{
 </div>
 <?php } ?>
 
-<!-- ADD SOFTWARE FORM -->
-<form method="POST">
-<h3><i class="fa fa-plus-circle"></i> Add Software</h3>
-<input type="text" name="software_name" placeholder="Software Name" required>
-<input type="text" name="vendor" placeholder="Vendor">
-<input type="text" name="license_type" placeholder="License Type">
-<input type="number" name="total_licenses" placeholder="Total Licenses">
-<label>Purchase Date</label>
-<input type="date" name="purchase_date">
-<label>Expiry Date</label>
-<input type="date" name="expiry_date">
-<input type="number" step="0.01" name="cost" placeholder="Cost">
-<textarea name="notes" placeholder="Notes"></textarea>
-<button name="add_software"><i class="fa fa-plus"></i> Add Software</button>
-</form>
-
-<!-- SEARCH -->
-<form method="GET" class="search">
-<input type="text" name="software" placeholder="Software">
-<input type="text" name="vendor" placeholder="Vendor">
-<select name="status">
-    <option value="">Status</option>
-    <option value="active">Active</option>
-    <option value="expired">Expired</option>
-</select>
-<button><i class="fa fa-search"></i> Search</button>
-</form>
-
-<!-- EXPORT -->
-<div class="export" style="margin:20px 0;">
-<a href="export_softwares_excel.php"><button><i class="fa fa-file-excel"></i> Export Excel</button></a>
-<a href="export_softwares_pdf.php"><button><i class="fa fa-file-pdf"></i> Export PDF</button></a>
-</div>
-
 <!-- SOFTWARE TABLE -->
 <table>
 <tr>
@@ -305,7 +348,6 @@ tr:hover{
 <th>Used</th>
 <th>Expiry</th>
 <th>Status</th>
-<th>Action</th>
 </tr>
 
 <?php while($row=$result->fetch_assoc()){
@@ -321,11 +363,66 @@ if($row['expiry_date'] < date("Y-m-d")){ $status="Expired"; $class="expired-text
 <td><?php echo $row['used_licenses']; ?></td>
 <td><?php echo $row['expiry_date']; ?></td>
 <td class="<?php echo $class; ?>"><?php echo $status; ?></td>
-<td><a class="delete" href="software_dashboard.php?delete=<?php echo $row['id']; ?>" onclick="return confirm('Delete software?')">Delete</a></td>
 </tr>
 <?php } ?>
-
 </table>
 </div>
+
+<!-- MODALS -->
+<div id="addModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal('addModal')">&times;</span>
+    <form method="POST">
+      <h3><i class="fa fa-plus-circle"></i> Add Software</h3>
+      <input type="text" name="software_name" placeholder="Software Name" required>
+      <input type="text" name="vendor" placeholder="Vendor">
+      <input type="text" name="license_type" placeholder="License Type">
+      <input type="number" name="total_licenses" placeholder="Total Licenses">
+      <label>Purchase Date</label>
+      <input type="date" name="purchase_date">
+      <label>Expiry Date</label>
+      <input type="date" name="expiry_date">
+      <input type="number" step="0.01" name="cost" placeholder="Cost">
+      <textarea name="notes" placeholder="Notes"></textarea>
+      <button name="add_software"><i class="fa fa-plus"></i> Add Software</button>
+    </form>
+  </div>
+</div>
+
+<div id="renewModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal('renewModal')">&times;</span>
+    <form method="POST">
+      <h3><i class="fa fa-sync-alt"></i> Renew License</h3>
+      <input type="number" name="license_id" placeholder="License ID" required>
+      <label>New Expiry Date</label>
+      <input type="date" name="new_expiry_date" required>
+      <button name="renew_license"><i class="fa fa-sync-alt"></i> Renew</button>
+    </form>
+  </div>
+</div>
+
+<div id="deleteModal" class="modal">
+  <div class="modal-content">
+    <span class="close" onclick="closeModal('deleteModal')">&times;</span>
+    <form method="POST">
+      <h3><i class="fa fa-trash"></i> Delete License</h3>
+      <input type="number" name="license_id" placeholder="License ID" required>
+      <button name="delete_license"><i class="fa fa-trash"></i> Delete</button>
+    </form>
+  </div>
+</div>
+
+<script>
+function openModal(id){ document.getElementById(id).style.display='block'; }
+function closeModal(id){ document.getElementById(id).style.display='none'; }
+window.onclick = function(event){
+    ['addModal','renewModal','deleteModal'].forEach(id=>{
+        let modal=document.getElementById(id);
+        if(event.target==modal) modal.style.display='none';
+    });
+}
+</script>
+
 </body>
 </html>

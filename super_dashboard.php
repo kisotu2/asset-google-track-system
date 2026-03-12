@@ -133,7 +133,7 @@ function showSection(sectionId){
 <body>
 
 <div class="sidebar">
-<h2>IRA SYSTEM</h2>
+<h2>IRA Asset System</h2>
 
 <a href="#" onclick="showSection('dashboard')">
 <i class="fa fa-chart-line"></i> Dashboard
@@ -283,15 +283,32 @@ function showSection(sectionId){
 <!-- SOFTWARE LIST -->
 <div class="section" id="softwaresList">
 <h2>All Software</h2>
+
 <table>
-<tr><th>Name</th><th>Vendor</th><th>License</th></tr>
+<tr>
+<th>Name</th>
+<th>Vendor</th>
+<th>License</th>
+<th>Action</th>
+</tr>
+
 <?php while($s=$softwares->fetch_assoc()){ ?>
+
 <tr>
 <td><?php echo $s['software_name']; ?></td>
 <td><?php echo $s['vendor']; ?></td>
 <td><?php echo $s['license_type']; ?></td>
+
+<td>
+<a href="software_details.php?id=<?php echo $s['id']; ?>">
+<button class="viewBtn">View Details</button>
+</a>
+</td>
+
 </tr>
+
 <?php } ?>
+
 </table>
 </div>
 
