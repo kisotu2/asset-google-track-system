@@ -89,11 +89,27 @@ $available=$conn->query("SELECT COUNT(*) as t FROM softwares WHERE expiry_date >
 $alerts=$conn->query("SELECT software_name,expiry_date FROM softwares WHERE expiry_date BETWEEN '$today' AND '$warning'");
 
 $where="WHERE 1=1";
-if(!empty($_GET['software'])) $where.=" AND software_name LIKE '%".$_GET['software']."%'";
-if(!empty($_GET['vendor'])) $where.=" AND vendor LIKE '%".$_GET['vendor']."%'";
+
+if(!empty($_GET['software'])){
+    $software = $conn->real_escape_string($_GET['software']);
+    $where .= " AND software_name LIKE '%$software%'";
+}
+
+if(!empty($_GET['vendor'])){
+    $vendor = $conn->real_escape_string($_GET['vendor']);
+    $where .= " AND vendor LIKE '%$vendor%'";
+}
+
 if(!empty($_GET['status'])){
-    if($_GET['status']=="active") $where.=" AND expiry_date >= '$today'";
-    if($_GET['status']=="expired") $where.=" AND expiry_date < '$today'";
+    if($_GET['status']=="active"){
+        $where .= " AND expiry_date >= '$today'";
+    }
+    elseif($_GET['status']=="expired"){
+        $where .= " AND expiry_date < '$today'";
+    }
+    elseif($_GET['status']=="expiring"){
+        $where .= " AND expiry_date BETWEEN '$today' AND '$warning'";
+    }
 }
 
 $result=$conn->query("SELECT * FROM softwares $where ORDER BY expiry_date ASC");
@@ -176,9 +192,11 @@ body{
     text-align:center;
     box-shadow:0 4px 12px rgba(0,0,0,0.1);
     transition:0.3s;
+    text-decoration:none; /* IMPORTANT */
 }
 .card:hover{
     transform:translateY(-5px);
+    background:#b08116;
 }
 .card h3{
     margin:0 0 10px 0;
@@ -304,15 +322,15 @@ tr:hover{
 <i class="fa fa-trash"></i> Delete License
 </a>
 
-<a href="#reports">
+<a href="software_reports.php">
 <i class="fa fa-chart-line"></i> Reports
 </a>
 
 <!-- Spacer to push buttons to bottom -->
 <div style="flex-grow:1;"></div>
 
-<a href="admin_dashboard.php">
-<i class="fa fa-arrow-left"></i> Back
+<a href="super_dashboard.php">
+    <i class="fa fa-arrow-left"></i> Back
 </a>
 
 <a href="logout.php">
@@ -332,22 +350,25 @@ tr:hover{
 
 <!-- DASHBOARD CARDS -->
 <div class="cards">
-    <div class="card">
+    <a href="?status=all" class="card">
         <h3>Total Licenses</h3>
         <p><?php echo $total; ?></p>
-    </div>
-    <div class="card">
+    </a>
+
+    <a href="?status=expiring" class="card">
         <h3>Expiring Soon</h3>
         <p><?php echo $expiring; ?></p>
-    </div>
-    <div class="card">
+    </a>
+
+    <a href="?status=expired" class="card">
         <h3>Expired</h3>
         <p><?php echo $expired; ?></p>
-    </div>
-    <div class="card">
+    </a>
+
+    <a href="?status=active" class="card">
         <h3>Available</h3>
         <p><?php echo $available; ?></p>
-    </div>
+    </a>
 </div>
 
 <!-- ALERTS -->
@@ -448,6 +469,5 @@ window.onclick = function(event){
     });
 }
 </script>
-
 </body>
 </html>

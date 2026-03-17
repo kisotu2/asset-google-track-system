@@ -72,6 +72,70 @@ if(isset($_POST['issue_assets'])){
     $update->bind_param("ii",$user_id,$laptop_id);
     $update->execute();
 
+    // GET USER EMAIL
+$stmt = $conn->prepare("SELECT email, full_name FROM users WHERE id=?");
+$stmt->bind_param("i", $user_id);
+$stmt->execute();
+$userData = $stmt->get_result()->fetch_assoc();
+
+$email = $userData['email'];
+$name = $userData['full_name'];
+
+// CREATE UNIQUE TOKEN
+$token = bin2hex(random_bytes(16));
+
+// SAVE APPROVAL REQUEST
+$approval = $conn->prepare("INSERT INTO asset_approvals (user_id,laptop_id,token) VALUES (?,?,?)");
+$approval->bind_param("iis", $user_id, $laptop_id, $token);
+$approval->execute();
+
+// BUILD APPROVAL LINKS
+$approve_link = "http://yourdomain.com/approve.php?token=$token&action=approve";
+$decline_link = "http://yourdomain.com/approve.php?token=$token&action=decline";
+
+// COLLECT DATA FOR EMAIL
+$accessories_list = [];
+if($mouse) $accessories_list[] = "Mouse";
+if($charger) $accessories_list[] = "Charger";
+
+$software_list = [];
+foreach($softwares as $software){
+    if(isset($_POST['software'][$software])){
+        $software_list[] = $software;
+    }
+}
+if(!empty($other)) $software_list[] = $other;
+
+// EMAIL MESSAGE
+$subject = "IT Asset Assignment Approval";
+
+$message_email = "
+Hello $name,
+
+You have been assigned the following IT assets:
+
+Laptop ID: $laptop_id
+
+Accessories:
+".implode(", ", $accessories_list)."
+
+Software:
+".implode(", ", $software_list)."
+
+Please confirm:
+
+Approve: $approve_link
+Decline: $decline_link
+
+Thank you.
+";
+
+// HEADERS
+$headers = "From: ict@yourcompany.com";
+
+// SEND EMAIL
+mail($email, $subject, $message_email, $headers);
+
     $message="✅ Laptop, accessories, and software issued successfully";
 }
 
@@ -257,7 +321,29 @@ font-size:16px;
 <input type="text" name="other_software" placeholder="Enter other software if needed">
 </div>
 
-<button type="submit" name="issue_assets">Issue Assets</button>
+<div style="display:flex; gap:15px;">
+
+<button type="submit" name="issue_assets" style="flex:1;">
+    Issue Assets
+</button>
+
+<a href="super_dashboard.php" style="
+background:linear-gradient(180deg,#99bb4f,#b08116);
+color:white;
+border:none;
+padding:14px 25px;
+font-size:16px;
+border-radius:8px;
+cursor:pointer;
+margin-top:20px;
+font-weight:500;
+transition:0.3s;
+width:50%;
+">
+    Back
+</a>
+
+</div>
 </form>
 </div>
 
