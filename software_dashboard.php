@@ -248,7 +248,7 @@ th,td{
     border-bottom:1px solid #ddd;
 }
 th{
-    background:linear-gradient(90deg,#b08116,#99bb4f);
+    background:#b08116;
     color:white;
 }
 tr:hover{
@@ -289,11 +289,36 @@ tr:hover{
 
 <!-- SIDEBAR -->
 <div class="sidebar">
+
 <h2>License Management</h2>
-<a onclick="openModal('addModal')"><i class="fa fa-plus-circle"></i> Add License</a>
-<a onclick="openModal('renewModal')"><i class="fa fa-sync-alt"></i> Renew License</a>
-<a onclick="openModal('deleteModal')"><i class="fa fa-trash"></i> Delete License</a>
-<a href="#reports"><i class="fa fa-chart-line"></i> Reports</a>
+
+<a onclick="openModal('addModal')">
+<i class="fa fa-plus-circle"></i> Add License
+</a>
+
+<a onclick="openModal('renewModal')">
+<i class="fa fa-sync-alt"></i> Renew License
+</a>
+
+<a onclick="openModal('deleteModal')">
+<i class="fa fa-trash"></i> Delete License
+</a>
+
+<a href="#reports">
+<i class="fa fa-chart-line"></i> Reports
+</a>
+
+<!-- Spacer to push buttons to bottom -->
+<div style="flex-grow:1;"></div>
+
+<a href="admin_dashboard.php">
+<i class="fa fa-arrow-left"></i> Back
+</a>
+
+<a href="logout.php">
+<i class="fa fa-sign-out-alt"></i> Logout
+</a>
+
 </div>
 
 <!-- MAIN CONTENT -->

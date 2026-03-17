@@ -149,10 +149,27 @@ function closeModal(id){document.getElementById('modal-'+id).style.display='none
 
 <div class="sidebar">
 <h2>IRA Asset System</h2>
-<a href="admin_dashboard.php" class="<?= $current_page=='admin_dashboard.php'?'active':'' ?>">🏠 Dashboard</a>
-<a href="issue_software.php" class="<?= $current_page=='issue_software.php'?'active':'' ?>">💾 Issue Software</a>
-<a href="history.php" class="<?= $current_page=='history.php'?'active':'' ?>">📜 Asset History</a>
-<a href="logout.php">🚪 Logout</a>
+
+<a href="admin_dashboard.php" class="<?= $current_page=='admin_dashboard.php'?'active':'' ?>">
+🏠 Dashboard
+</a>
+
+<a href="issue_software.php" class="<?= $current_page=='issue_software.php'?'active':'' ?>">
+💾 Issue Software
+</a>
+
+<a href="history.php" class="<?= $current_page=='history.php'?'active':'' ?>">
+📜 Asset History
+</a>
+
+<a href="javascript:history.back()">
+⬅ Back
+</a>
+
+<a href="logout.php">
+🚪 Logout
+</a>
+
 </div>
 
 <div class="main">

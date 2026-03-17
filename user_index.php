@@ -105,7 +105,7 @@ font-weight:bold;
 .profile{
 max-width:1000px;
 margin:30px auto;
-background:white;
+background:beige;
 padding:25px;
 border-radius:10px;
 box-shadow:0 5px 20px rgba(0,0,0,0.08);
