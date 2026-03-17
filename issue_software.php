@@ -1,6 +1,12 @@
 <?php
 require 'db.php';
 session_start();
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
+require 'PHPMailer-master/src/Exception.php';
+require 'PHPMailer-master/src/PHPMailer.php';
+require 'PHPMailer-master/src/SMTP.php';
 
 /* ===============================
 ACCESS CONTROL
@@ -14,151 +20,198 @@ $message="";
 $admin_id=$_SESSION['user_id'];
 
 /* ===============================
-ISSUE COMPLETE ASSETS LOGIC
+INITIALIZE VARIABLES
 =================================*/
-if(isset($_POST['issue_assets'])){
-    $user_id=intval($_POST['user_id']);
-    $laptop_id=intval($_POST['laptop_id']);
+$mouse = 0;
+$charger = 0;
+$softwares = ["Office 365","Kaspersky","PDF Reader","Teams","Zoom","AnyDesk","Idea Share","Ultraviewer","Dameware"];
+$other = '';
+$software_counts = [];
 
-    // Laptop history
-    $history=$conn->prepare("INSERT INTO laptop_history (laptop_id,user_id,admin_id,action_type) VALUES (?,?,?,?)");
-    $action="Laptop Issued";
-    $history->bind_param("iiis",$laptop_id,$user_id,$admin_id,$action);
-    $history->execute();
-
-    // Accessories
-    $mouse = isset($_POST['mouse']) ? 1 : 0;
-    $charger = isset($_POST['charger']) ? 1 : 0;
-    $acc=$conn->prepare("INSERT INTO laptop_accessories (laptop_id,user_id,mouse_given,charger_given,issued_by) VALUES (?,?,?,?,?)");
-    $acc->bind_param("iiiii",$laptop_id,$user_id,$mouse,$charger,$admin_id);
-    $acc->execute();
-
-    // Software licenses
-    $softwares=["Office 365","Kaspersky","PDF Reader","Teams","Zoom","AnyDesk","Idea Share","Ultraviewer","Dameware"];
-    foreach($softwares as $software){
-        if(isset($_POST['software'][$software])){
-            $stmt=$conn->prepare("SELECT id,total_licenses,used_licenses FROM softwares WHERE software_name=?");
-            $stmt->bind_param("s",$software);
-            $stmt->execute();
-            $data=$stmt->get_result()->fetch_assoc();
-            if($data){
-                $available=$data['total_licenses']-$data['used_licenses'];
-                if($available>0){
-                    $update=$conn->prepare("UPDATE softwares SET used_licenses=used_licenses+1 WHERE id=?");
-                    $update->bind_param("i",$data['id']);
-                    $update->execute();
-
-                    $insert=$conn->prepare("INSERT INTO user_software (user_id,software_name,issued_by) VALUES (?,?,?)");
-                    $insert->bind_param("isi",$user_id,$software,$admin_id);
-                    $insert->execute();
-
-                    $history=$conn->prepare("INSERT INTO software_history (software_id,user_id,admin_id,action_type) VALUES (?,?,?,?)");
-                    $action="License Issued";
-                    $history->bind_param("iiis",$data['id'],$user_id,$admin_id,$action);
-                    $history->execute();
-                }
-            }
-        }
+/* ===============================
+FETCH SOFTWARE LICENSE COUNTS
+=================================*/
+$result = $conn->query("SELECT software_name, total_licenses, used_licenses FROM softwares");
+if($result){
+    while($row = $result->fetch_assoc()){
+        $software_counts[$row['software_name']] = $row['total_licenses'] - $row['used_licenses'];
     }
-
-    if(!empty($_POST['other_software'])){
-        $other=trim($_POST['other_software']);
-        $insert=$conn->prepare("INSERT INTO user_software (user_id,software_name,issued_by) VALUES (?,?,?)");
-        $insert->bind_param("isi",$user_id,$other,$admin_id);
-        $insert->execute();
-    }
-
-    $update=$conn->prepare("UPDATE laptops SET status='issued',assigned_to=? WHERE id=?");
-    $update->bind_param("ii",$user_id,$laptop_id);
-    $update->execute();
-
-    // GET USER EMAIL
-$stmt = $conn->prepare("SELECT email, full_name FROM users WHERE id=?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$userData = $stmt->get_result()->fetch_assoc();
-
-$email = $userData['email'];
-$name = $userData['full_name'];
-
-// CREATE UNIQUE TOKEN
-$token = bin2hex(random_bytes(16));
-
-// SAVE APPROVAL REQUEST
-$approval = $conn->prepare("INSERT INTO asset_approvals (user_id,laptop_id,token) VALUES (?,?,?)");
-$approval->bind_param("iis", $user_id, $laptop_id, $token);
-$approval->execute();
-
-// BUILD APPROVAL LINKS
-$approve_link = "http://yourdomain.com/approve.php?token=$token&action=approve";
-$decline_link = "http://yourdomain.com/approve.php?token=$token&action=decline";
-
-// COLLECT DATA FOR EMAIL
-$accessories_list = [];
-if($mouse) $accessories_list[] = "Mouse";
-if($charger) $accessories_list[] = "Charger";
-
-$software_list = [];
-foreach($softwares as $software){
-    if(isset($_POST['software'][$software])){
-        $software_list[] = $software;
-    }
-}
-if(!empty($other)) $software_list[] = $other;
-
-// EMAIL MESSAGE
-$subject = "IT Asset Assignment Approval";
-
-$message_email = "
-Hello $name,
-
-You have been assigned the following IT assets:
-
-Laptop ID: $laptop_id
-
-Accessories:
-".implode(", ", $accessories_list)."
-
-Software:
-".implode(", ", $software_list)."
-
-Please confirm:
-
-Approve: $approve_link
-Decline: $decline_link
-
-Thank you.
-";
-
-// HEADERS
-$headers = "From: ict@yourcompany.com";
-
-// SEND EMAIL
-mail($email, $subject, $message_email, $headers);
-
-    $message="✅ Laptop, accessories, and software issued successfully";
 }
 
 /* ===============================
 FETCH USERS
 =================================*/
-$users=[]; $r=$conn->query("SELECT id,full_name FROM users WHERE role='user' AND status='active'");
-while($row=$r->fetch_assoc()){ $users[]=$row; }
-
-/* ===============================
-FETCH SOFTWARE LICENSE COUNTS
-=================================*/
-$software_counts = [];
-$result = $conn->query("SELECT software_name,total_licenses,used_licenses FROM softwares");
-while($row = $result->fetch_assoc()){
-    $software_counts[$row['software_name']] = $row['total_licenses'] - $row['used_licenses'];
+$users = [];
+$r = $conn->query("SELECT id, full_name FROM users WHERE role='user' AND status='active'");
+while($row = $r->fetch_assoc()){
+    $users[] = $row;
 }
 
 /* ===============================
 FETCH AVAILABLE LAPTOPS
 =================================*/
-$laptops=[]; $r=$conn->query("SELECT id,asset_tag FROM laptops WHERE status='active' AND assigned_to IS NULL");
-while($row=$r->fetch_assoc()){ $laptops[]=$row; }
+$laptops = [];
+$r = $conn->query("SELECT id, asset_tag FROM laptops WHERE status='active' AND assigned_to IS NULL");
+while($row = $r->fetch_assoc()){
+    $laptops[] = $row;
+}
+
+/* ===============================
+ISSUE COMPLETE ASSETS LOGIC
+=================================*/
+if(isset($_POST['issue_assets'])){
+    $user_id = intval($_POST['user_id']);
+    $laptop_id = intval($_POST['laptop_id']);
+
+    // Check if user already has a laptop
+    $stmt_check = $conn->prepare("SELECT id FROM laptops WHERE assigned_to=?");
+    $stmt_check->bind_param("i", $user_id);
+    $stmt_check->execute();
+    $res_check = $stmt_check->get_result();
+    if($res_check->num_rows > 0){
+        $message = "⚠️ This user already has a laptop assigned.";
+    } else {
+        // Check if laptop is already assigned
+        $stmt_check_laptop = $conn->prepare("SELECT assigned_to FROM laptops WHERE id=?");
+        $stmt_check_laptop->bind_param("i", $laptop_id);
+        $stmt_check_laptop->execute();
+        $res_laptop = $stmt_check_laptop->get_result()->fetch_assoc();
+        if(!empty($res_laptop['assigned_to'])){
+            $message = "⚠️ This laptop is already assigned to another user.";
+        } else {
+            // Proceed with assignment
+            $mouse = isset($_POST['mouse']) ? 1 : 0;
+            $charger = isset($_POST['charger']) ? 1 : 0;
+            $other = !empty($_POST['other_software']) ? trim($_POST['other_software']) : '';
+
+            // Laptop history
+            $history = $conn->prepare("INSERT INTO laptop_history (laptop_id,user_id,admin_id,action_type) VALUES (?,?,?,?)");
+            $action = "Laptop Issued";
+            $history->bind_param("iiis", $laptop_id, $user_id, $admin_id, $action);
+            $history->execute();
+
+            // Accessories
+            $acc = $conn->prepare("INSERT INTO laptop_accessories (laptop_id,user_id,mouse_given,charger_given,issued_by) VALUES (?,?,?,?,?)");
+            $acc->bind_param("iiiii", $laptop_id, $user_id, $mouse, $charger, $admin_id);
+            $acc->execute();
+
+            // Software licenses
+            foreach($softwares as $software){
+                if(isset($_POST['software'][$software])){
+                    $stmt = $conn->prepare("SELECT id,total_licenses,used_licenses FROM softwares WHERE software_name=?");
+                    $stmt->bind_param("s", $software);
+                    $stmt->execute();
+                    $data = $stmt->get_result()->fetch_assoc();
+                    if($data && ($data['total_licenses'] - $data['used_licenses']) > 0){
+                        $update = $conn->prepare("UPDATE softwares SET used_licenses=used_licenses+1 WHERE id=?");
+                        $update->bind_param("i", $data['id']);
+                        $update->execute();
+
+                        $insert = $conn->prepare("INSERT INTO user_software (user_id,software_name,issued_by) VALUES (?,?,?)");
+                        $insert->bind_param("isi", $user_id, $software, $admin_id);
+                        $insert->execute();
+
+                        $history = $conn->prepare("INSERT INTO software_history (software_id,user_id,admin_id,action_type) VALUES (?,?,?,?)");
+                        $action = "License Issued";
+                        $history->bind_param("iiis", $data['id'], $user_id, $admin_id, $action);
+                        $history->execute();
+                    }
+                }
+            }
+
+            // Other software
+            if(!empty($other)){
+                $insert = $conn->prepare("INSERT INTO user_software (user_id,software_name,issued_by) VALUES (?,?,?)");
+                $insert->bind_param("isi", $user_id, $other, $admin_id);
+                $insert->execute();
+            }
+
+            // Update laptop assignment
+            $update = $conn->prepare("UPDATE laptops SET status='issued', assigned_to=? WHERE id=?");
+            $update->bind_param("ii", $user_id, $laptop_id);
+            $update->execute();
+
+            /* ===============================
+            SEND ASSET APPROVAL EMAIL
+            =================================*/
+            $stmt = $conn->prepare("SELECT email, full_name FROM users WHERE id=?");
+            $stmt->bind_param("i", $user_id);
+            $stmt->execute();
+            $user = $stmt->get_result()->fetch_assoc();
+
+            $token = bin2hex(random_bytes(16));
+
+            $approval = $conn->prepare("INSERT INTO asset_approvals (user_id,laptop_id,token,admin_id) VALUES (?,?,?,?)");
+            $approval->bind_param("iisi", $user_id, $laptop_id, $token, $admin_id);
+            $approval->execute();
+
+            // Detect protocol and host dynamically
+$host = $_SERVER['HTTP_HOST'];
+
+// If running on localhost, force http (bypass HSTS/HTTPS issues)
+if (strpos($host, 'localhost') !== false || strpos($host, '127.0.0.1') !== false) {
+    $protocol = 'http://';
+} else {
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? "https://" : "https://";
+}
+
+// Build approval/decline links
+$approve_link = "{$protocol}{$host}/approve.php?token={$token}&action=approve";
+$decline_link = "{$protocol}{$host}/approve.php?token={$token}&action=decline";
+
+            $accessories_list = [];
+            if($mouse) $accessories_list[] = "Mouse";
+            if($charger) $accessories_list[] = "Charger";
+
+            $software_list = [];
+            foreach($softwares as $software){
+                if(isset($_POST['software'][$software])){
+                    $software_list[] = $software;
+                }
+            }
+            if(!empty($other)) $software_list[] = $other;
+
+            $subject = "IRA IT Asset Assignment Approval";
+            $body = "
+            <h3>IRA Asset Management System</h3>
+            <p>Hello {$user['full_name']},</p>
+            <p>You have been assigned the following IT assets:</p>
+            <strong>Laptop:</strong> $laptop_id<br>
+            <strong>Accessories:</strong> ".implode(", ", $accessories_list)."<br>
+            <strong>Software:</strong> ".implode(", ", $software_list)."<br><br>
+            <p>Please approve or decline your assignment:</p>
+            <a href='$approve_link' style='padding:10px 15px;background:#28a745;color:white;text-decoration:none;border-radius:5px;'>Approve</a>
+            <a href='$decline_link' style='padding:10px 15px;background:#dc3545;color:white;text-decoration:none;border-radius:5px;margin-left:10px;'>Decline</a>
+            <br><br>
+            <small>If you did not receive this assignment, please contact ICT.</small>
+            ";
+
+            $mail = new PHPMailer(true);
+            try{
+                $mail->isSMTP();
+                $mail->Host       = 'smtp.gmail.com';
+                $mail->SMTPAuth   = true;
+                $mail->Username   = 'kisotusamuel2@gmail.com';
+                $mail->Password   = 'pgveakwibzlhicqs';
+                $mail->SMTPSecure = 'tls';
+                $mail->Port       = 587;
+
+                $mail->setFrom('kisotusamuel2@gmail.com', 'IRA Asset Management System');
+                $mail->addAddress($user['email'], $user['full_name']);
+
+                $mail->isHTML(true);
+                $mail->Subject = $subject;
+                $mail->Body    = $body;
+
+                $mail->send();
+            } catch(Exception $e){
+                $message .= " ⚠️ Failed to send asset approval email: {$mail->ErrorInfo}";
+            }
+
+            $message .= " ✅ Laptop, accessories, and software issued successfully and awaiting user approval.";
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>

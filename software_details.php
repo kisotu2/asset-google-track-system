@@ -119,7 +119,7 @@ h2 {
 
 <div class="container">
 
-<button class="backBtn" onclick="window.location.href='admin_dashboard.php'">← Back</button>
+<button class="backBtn" onclick="window.location.href='super_dashboard.php'">← Back</button>
 
 <h2><?php echo $software['software_name']; ?></h2>
 
