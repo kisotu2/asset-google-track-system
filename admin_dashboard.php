@@ -59,11 +59,11 @@ while($row = $result->fetch_assoc()){
 /* ==========================
    DASHBOARD STATS
 ========================== */
-$total_assets    = $conn->query("SELECT COUNT(*) as total FROM laptops")->fetch_assoc()['total'];
-$available_assets= $conn->query("SELECT COUNT(*) as total FROM laptops WHERE status='Available'")->fetch_assoc()['total'];
-$assigned_assets = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE status='Assigned'")->fetch_assoc()['total'];
-$retired_assets  = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE status='Retired'")->fetch_assoc()['total'];
-$disposed_assets = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE status='Disposed'")->fetch_assoc()['total'];
+$assigned_assets = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE LOWER(status)='assigned'")->fetch_assoc()['total'];
+$available_assets = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE LOWER(status)='available'")->fetch_assoc()['total'];
+$retired_assets = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE LOWER(status)='retired'")->fetch_assoc()['total'];
+$disposed_assets = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE LOWER(status)='disposed' OR LOWER(status)='faulty'")->fetch_assoc()['total'];
+$total_assets = $conn->query("SELECT COUNT(*) as total FROM laptops")->fetch_assoc()['total'];
 
 /* ==========================
    FILTER
@@ -71,11 +71,21 @@ $disposed_assets = $conn->query("SELECT COUNT(*) as total FROM laptops WHERE sta
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
 $whereClause = "";
 switch($filter){
-    case 'assigned': $whereClause = "WHERE l.status='Assigned'"; break;
-    case 'available': $whereClause = "WHERE l.status='Available'"; break;
-    case 'retired': $whereClause = "WHERE l.status='Retired'"; break;
-    case 'disposed': $whereClause = "WHERE l.status='Disposed'"; break;
-    default: $whereClause = ""; break;
+    case 'assigned': 
+        $whereClause = "WHERE l.status='Assigned' OR l.status='assigned'";
+        break;
+    case 'available': 
+        $whereClause = "WHERE l.status='Available'";
+        break;
+    case 'retired': 
+        $whereClause = "WHERE l.status='Retired'";
+        break;
+    case 'disposed': 
+        $whereClause = "WHERE l.status='Disposed' OR l.status='Faulty'";
+        break;
+    default: 
+        $whereClause = "";
+        break;
 }
 
 /* ==========================
@@ -162,6 +172,10 @@ function closeModal(id){document.getElementById('modal-'+id).style.display='none
 📜 Asset History
 </a>
 
+<a href="unassign_device.php">
+🔄 Unassign Device
+</a>
+
 <a href="javascript:history.back()">
 ⬅ Back
 </a>
@@ -180,11 +194,21 @@ function closeModal(id){document.getElementById('modal-'+id).style.display='none
 <input type="text" id="searchLaptop" class="search-bar" placeholder="Search assets or users..." onkeyup="searchLaptop()">
 
 <div class="card-container">
-<div class="card <?= $filter=='all'?'active-card':'' ?>" onclick="goFilter('all')"><h2><?= $total_assets ?></h2><p>Total</p></div>
-<div class="card <?= $filter=='available'?'active-card':'' ?>" onclick="goFilter('available')"><h2><?= $available_assets ?></h2><p>Available</p></div>
-<div class="card <?= $filter=='assigned'?'active-card':'' ?>" onclick="goFilter('assigned')"><h2><?= $assigned_assets ?></h2><p>Assigned</p></div>
-<div class="card <?= $filter=='retired'?'active-card':'' ?>" onclick="goFilter('retired')"><h2><?= $retired_assets ?></h2><p>Retired</p></div>
-<div class="card <?= $filter=='disposed'?'active-card':'' ?>" onclick="goFilter('disposed')"><h2><?= $disposed_assets ?></h2><p>Disposed</p></div>
+  <div class="card <?= $filter=='all' ? 'active-card' : '' ?>" onclick="goFilter('all')">
+    <h2><?= $total_assets ?></h2><p>Total</p>
+  </div>
+  <div class="card <?= $filter=='available' ? 'active-card' : '' ?>" onclick="goFilter('available')">
+    <h2><?= $available_assets ?></h2><p>Available</p>
+  </div>
+  <div class="card <?= $filter=='assigned' ? 'active-card' : '' ?>" onclick="goFilter('assigned')">
+    <h2><?= $assigned_assets ?></h2><p>Issued</p>
+  </div>
+  <div class="card <?= $filter=='retired' ? 'active-card' : '' ?>" onclick="goFilter('retired')">
+    <h2><?= $retired_assets ?></h2><p>Retired</p>
+  </div>
+  <div class="card <?= $filter=='disposed' ? 'active-card' : '' ?>" onclick="goFilter('disposed')">
+    <h2><?= $disposed_assets ?></h2><p>Faulty / Disposed</p>
+  </div>
 </div>
 
 <?php if($message): ?><p style="color:green;font-weight:bold;"><?= htmlspecialchars($message) ?></p><?php endif; ?>

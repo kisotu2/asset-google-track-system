@@ -200,7 +200,7 @@ th {
 
 <body>
 
-<h1>Laptop Assignment History</h1>
+<h1>Asset Assignment History</h1>
 
 <!-- ================= FILTER SECTION ================= -->
 <div class="filter-box">

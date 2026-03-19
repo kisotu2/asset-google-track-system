@@ -91,9 +91,14 @@ if(isset($_POST['issue_assets'])){
             $history->execute();
 
             // Accessories
-            $acc = $conn->prepare("INSERT INTO laptop_accessories (laptop_id,user_id,mouse_given,charger_given,issued_by) VALUES (?,?,?,?,?)");
-            $acc->bind_param("iiiii", $laptop_id, $user_id, $mouse, $charger, $admin_id);
-            $acc->execute();
+            $bag = isset($_POST['bag']) ? 1 : 0;
+
+$acc = $conn->prepare("
+    INSERT INTO laptop_accessories (laptop_id,user_id,mouse_given,charger_given,bag_given,issued_by)
+    VALUES (?,?,?,?,?,?)
+");
+$acc->bind_param("iiiiii", $laptop_id, $user_id, $mouse, $charger, $bag, $admin_id);
+$acc->execute();
 
             // Software licenses
             foreach($softwares as $software){
@@ -110,6 +115,14 @@ if(isset($_POST['issue_assets'])){
                         $insert = $conn->prepare("INSERT INTO user_software (user_id,software_name,issued_by) VALUES (?,?,?)");
                         $insert->bind_param("isi", $user_id, $software, $admin_id);
                         $insert->execute();
+
+                        // Insert into software_assignments
+$assign = $conn->prepare("
+    INSERT INTO software_assignments (software_id, user_id, assigned_date)
+    VALUES (?, ?, NOW())
+");
+$assign->bind_param("ii", $data['id'], $user_id);
+$assign->execute();
 
                         $history = $conn->prepare("INSERT INTO software_history (software_id,user_id,admin_id,action_type) VALUES (?,?,?,?)");
                         $action = "License Issued";
@@ -351,8 +364,11 @@ font-size:16px;
 <div class="form-group">
 <div class="section-title">Accessories</div>
 <div class="accessories">
-<label><input type="checkbox" name="mouse"> Mouse</label>
-<label><input type="checkbox" name="charger"> Laptop Charger</label>
+<div class="accessories">
+    <label><input type="checkbox" name="mouse"> Mouse</label>
+    <label><input type="checkbox" name="charger"> Laptop Charger</label>
+    <label><input type="checkbox" name="bag"> Laptop Bag</label>
+</div>
 </div>
 </div>
 

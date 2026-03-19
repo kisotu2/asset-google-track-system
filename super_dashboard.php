@@ -69,10 +69,18 @@ if(isset($_POST['add_asset'])){
     $model=$_POST['model'];
     $status=$_POST['status'];
 
-    $stmt=$conn->prepare("INSERT INTO laptops(asset_tag,serial_number,brand,model,status) VALUES(?,?,?,?,?)");
-    $stmt->bind_param("sssss",$asset_tag,$serial,$brand,$model,$status);
+    $assigned_to = NULL; // always null on creation
+
+    $stmt=$conn->prepare("
+        INSERT INTO laptops(asset_tag,serial_number,brand,model,status,assigned_to)
+        VALUES(?,?,?,?,?,?)
+    ");
+    $stmt->bind_param("sssssi",$asset_tag,$serial,$brand,$model,$status,$assigned_to);
     $stmt->execute();
-    $message="✅ Asset added successfully!";
+
+    if($message): ?>
+<p class="message" id="alertMessage"><?= htmlspecialchars($message) ?></p>
+<?php endif; 
 }
 
 /* ===============================
@@ -267,7 +275,7 @@ function showSection(sectionId){
 <div class="section" id="assetsList">
 <h2>All Laptops</h2>
 <table>
-<tr><th>Asset Tag</th><th>Serial</th><th>Brand</th><th>Model</th><th>Status</th></tr>
+<tr><th>Asset Tag</th><th>Serial</th><th>Brand</th><th>Model</th><th>Status</th><th>State</th></tr>
 <?php while($l=$assets->fetch_assoc()){ ?>
 <tr>
 <td><?php echo $l['asset_tag']; ?></td>
@@ -275,6 +283,16 @@ function showSection(sectionId){
 <td><?php echo $l['brand']; ?></td>
 <td><?php echo $l['model']; ?></td>
 <td><?php echo $l['status']; ?></td>
+
+<td>
+<?php
+if(!empty($l['assigned_to'])){
+    echo "<span style='color:red;font-weight:bold;'>Issued</span>";
+}else{
+    echo "<span style='color:green;font-weight:bold;'>Available</span>";
+}
+?>
+</td>
 </tr>
 <?php } ?>
 </table>
