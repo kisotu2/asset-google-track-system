@@ -60,6 +60,52 @@ while($row = $r->fetch_assoc()){
 ISSUE COMPLETE ASSETS LOGIC
 =================================*/
 if(isset($_POST['issue_assets'])){
+    $asset_type = $_POST['asset_type'] ?? '';
+$laptop_id = $desktop_id = $phone_id = null;
+
+if($asset_type == 'laptop'){
+    $laptop_id = intval($_POST['laptop_id']);
+    // assign laptop logic (same as before)
+    $update = $conn->prepare("UPDATE laptops SET status='issued', assigned_to=? WHERE id=?");
+    $update->bind_param("ii", $user_id, $laptop_id);
+    $update->execute();
+
+    // Insert laptop history
+    $history = $conn->prepare("INSERT INTO laptop_history (laptop_id,user_id,admin_id,action_type) VALUES (?,?,?,?)");
+    $action = "Laptop Issued";
+    $history->bind_param("iiis", $laptop_id, $user_id, $admin_id, $action);
+    $history->execute();
+
+} elseif($asset_type == 'desktop'){
+    $desktop_id = intval($_POST['desktop_id']);
+    // assign desktop logic
+    $update = $conn->prepare("UPDATE desktops SET status='issued', assigned_to=? WHERE id=?");
+    $update->bind_param("ii", $user_id, $desktop_id);
+    $update->execute();
+
+    // Insert desktop history
+    $history = $conn->prepare("INSERT INTO desktop_history (desktop_id,user_id,admin_id,action_type) VALUES (?,?,?,?)");
+    $action = "Desktop Issued";
+    $history->bind_param("iiis", $desktop_id, $user_id, $admin_id, $action);
+    $history->execute();
+}
+
+// Assign phone if selected
+if(!empty($_POST['phone_id'])){
+    $phone_id = intval($_POST['phone_id']);
+    $phone_ext = trim($_POST['phone_ext'] ?? '');
+    
+    $update = $conn->prepare("UPDATE phones SET status='issued', assigned_to=? WHERE id=?");
+    $update->bind_param("ii", $user_id, $phone_id);
+    $update->execute();
+
+    // Insert phone history
+    $history = $conn->prepare("INSERT INTO phone_history (phone_id,user_id,admin_id,extension,action_type) VALUES (?,?,?,?,?)");
+    $action = "Phone Issued";
+    $history->bind_param("iiiss", $phone_id, $user_id, $admin_id, $phone_ext, $action);
+    $history->execute();
+}
+
     $user_id = intval($_POST['user_id']);
     $laptop_id = intval($_POST['laptop_id']);
 
@@ -352,14 +398,64 @@ font-size:16px;
 </div>
 
 <div class="form-group">
-<label>Select Laptop</label>
-<select name="laptop_id" required>
-<option value="">Select Laptop</option>
-<?php foreach($laptops as $l): ?>
-<option value="<?= $l['id'] ?>"><?= htmlspecialchars($l['asset_tag']) ?></option>
-<?php endforeach; ?>
-</select>
+    <label>Asset Type</label>
+    <select name="asset_type" id="asset_type" required onchange="toggleAssetSelection()">
+        <option value="">Select Type</option>
+        <option value="laptop">Laptop</option>
+        <option value="desktop">Desktop</option>
+    </select>
 </div>
+
+<div class="form-group" id="laptop_select">
+    <label>Select Laptop</label>
+    <select name="laptop_id">
+        <option value="">Select Laptop</option>
+        <?php foreach($laptops as $l): ?>
+        <option value="<?= $l['id'] ?>"><?= htmlspecialchars($l['asset_tag']) ?></option>
+        <?php endforeach; ?>
+    </select>
+</div>
+
+<div class="form-group" id="desktop_select" style="display:none;">
+    <label>Select Desktop</label>
+    <select name="desktop_id">
+        <option value="">Select Desktop</option>
+        <?php 
+        $desktops = [];
+        $r = $conn->query("SELECT id, asset_tag FROM desktops WHERE status='active' AND assigned_to IS NULL");
+        while($row = $r->fetch_assoc()){ $desktops[] = $row; }
+        foreach($desktops as $d): ?>
+        <option value="<?= $d['id'] ?>"><?= htmlspecialchars($d['asset_tag']) ?></option>
+        <?php endforeach; ?>
+    </select>
+</div>
+
+<div class="form-group">
+    <label>Select Phone</label>
+    <select name="phone_id">
+        <option value="">Select Phone</option>
+        <?php 
+        $phones = [];
+        $r = $conn->query("SELECT id, asset_tag FROM phones WHERE status='active' AND assigned_to IS NULL");
+        while($row = $r->fetch_assoc()){ $phones[] = $row; }
+        foreach($phones as $p): ?>
+        <option value="<?= $p['id'] ?>"><?= htmlspecialchars($p['asset_tag']) ?></option>
+        <?php endforeach; ?>
+    </select>
+</div>
+
+<div class="form-group">
+    <label>Phone Extension</label>
+    <input type="text" name="phone_ext" placeholder="Enter phone extension">
+</div>
+
+<script>
+function toggleAssetSelection(){
+    let type = document.getElementById('asset_type').value;
+    document.getElementById('laptop_select').style.display = type=='laptop'?'block':'none';
+    document.getElementById('desktop_select').style.display = type=='desktop'?'block':'none';
+}
+</script>
 
 <div class="form-group">
 <div class="section-title">Accessories</div>
