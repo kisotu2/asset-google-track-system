@@ -6,4 +6,6 @@ return [
     'google_maps_api_key' => '',
     // Email OTP is only sent when these are configured; development displays no OTP.
     'mail_host' => '', 'mail_username' => '', 'mail_password' => '', 'mail_port' => 587,
+    // Receive approved-area alerts. Email is only attempted when mail settings and this are set.
+    'admin_alert_email' => '', 'mail_from' => '',
 ];
