@@ -1,4 +1,10 @@
 <?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+session_start();
+?>
+
+<?php
 require 'db.php';
 
 /* =========================
@@ -231,11 +237,11 @@ $users = array_merge(
 );
 
 /* =========================
-   INSERT USERS
+INSERT USERS
 ========================= */
 
-$stmt = $conn->prepare("INSERT IGNORE INTO users 
-(full_name, email, password, role, status, new_role, super_password) 
+$stmt = $conn->prepare("INSERT IGNORE INTO users
+(full_name, email, password, role, status, new_role, super_password)
 VALUES (?, ?, ?, 'user', 'active', 'user', NULL)");
 
 foreach ($users as $user) {

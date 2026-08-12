@@ -12,12 +12,12 @@ while($row = $stmt->fetch_assoc()){
         $mail->isSMTP();
         $mail->Host       = 'smtp.gmail.com';
         $mail->SMTPAuth   = true;
-        $mail->Username   = 'kisotusamuel2@gmail.com';
-        $mail->Password   = 'pgveakwibzlhicqs';
+        $mail->Username   = getenv('ASSET_MAIL_USERNAME') ?: '';
+        $mail->Password   = getenv('ASSET_MAIL_PASSWORD') ?: '';
         $mail->SMTPSecure = 'tls';
         $mail->Port       = 587;
 
-        $mail->setFrom('kisotusamuel2@gmail.com', 'IRA Asset Management System');
+        $mail->setFrom(getenv('ASSET_MAIL_FROM') ?: 'noreply@example.invalid', 'IRA Asset Management System');
         $mail->addAddress($row['email'], $row['full_name']);
 
         $mail->isHTML(true);
