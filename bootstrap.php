@@ -211,6 +211,14 @@ function layout_start(string $title): void
                             Maintenance
                         </a>
 
+                        <?php if (($_SESSION['role'] ?? '') === 'super_admin'): ?>
+
+                            <a href="users.php">
+                                Users
+                            </a>
+
+                        <?php endif; ?>
+
                     <?php endif; ?>
 
                     <a href="check_in.php">

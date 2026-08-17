@@ -6,15 +6,30 @@ ini_set('display_startup_errors', '1');
 require __DIR__ . '/bootstrap.php';
 
 require_login(['admin', 'super_admin']);
+require_once __DIR__ . '/maintenance_risk.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     verify_csrf();
 
+    $action = $_POST['action'] ?? '';
     $asset = (int)($_POST['asset_id'] ?? 0);
     $issue = trim($_POST['issue'] ?? '');
     $cost = (float)($_POST['cost'] ?? 0);
 
-    if ($asset && $issue !== '') {
+    if ($action === 'usage') {
+        $asset = (int) ($_POST['asset_id'] ?? 0);
+        $date = $_POST['usage_date'] ?? '';
+        $hours = max(0, min(24, (float) ($_POST['active_hours'] ?? 0)));
+        $crashes = max(0, (int) ($_POST['crash_count'] ?? 0));
+        $battery = $_POST['battery_health_percent'] === '' ? null : max(0, min(100, (int) $_POST['battery_health_percent']));
+        if ($asset && preg_match('/^\\d{4}-\\d{2}-\\d{2}$/', $date)) {
+            $stmt = $conn->prepare('INSERT INTO device_usage_daily (laptop_id,usage_date,active_hours,crash_count,battery_health_percent) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE active_hours=VALUES(active_hours),crash_count=VALUES(crash_count),battery_health_percent=VALUES(battery_health_percent)');
+            $stmt->bind_param('isdii', $asset, $date, $hours, $crashes, $battery);
+            $stmt->execute();
+            audit($conn, 'usage_metrics_recorded', 'laptop', $asset, ['usage_date' => $date]);
+            flash('Usage data recorded. The risk score has been updated.');
+        }
+    } elseif ($asset && $issue !== '') {
         $user = (int)$_SESSION['user_id'];
 
         $stmt = $conn->prepare(
@@ -81,6 +96,7 @@ $risks = $conn->query("
         END AS risk
 
     FROM laptops l
+
     LEFT JOIN maintenance_records m
         ON m.laptop_id = l.id
 
@@ -116,8 +132,8 @@ layout_start('Maintenance');
     <div>
         <h1>Maintenance and lifecycle</h1>
         <p class="muted">
-            Rule-based predictive prioritisation combines open repairs,
-            repeat repair history, and warranty expiry.
+            A logistic-regression model estimates failure risk from repair history,
+            warranty and asset age, plus the last 30 days of recorded usage.
         </p>
     </div>
 </div>
@@ -175,27 +191,11 @@ layout_start('Maintenance');
 
 
     <div class="panel">
-        <h2>How risk is calculated</h2>
-
-        <p>
-            <b>Repair required:</b>
-            an unresolved maintenance record exists.
-        </p>
-
-        <p>
-            <b>Repeated repairs:</b>
-            three or more recorded repairs.
-        </p>
-
-        <p>
-            <b>Warranty expired:</b>
-            warranty date has passed.
-        </p>
-
-        <p class="muted">
-            This is a transparent baseline. A later Flask ML service
-            can replace this score once sufficient historical data exists.
-        </p>
+        <h2>Record daily usage</h2>
+        <p class="muted">Enter observed daily values until a device-management agent supplies them automatically.</p>
+        <form method="post"><input type="hidden" name="csrf" value="<?= e(csrf()) ?>"><input type="hidden" name="action" value="usage">
+        <label>Asset<select name="asset_id" required><option value="">Choose asset</option><?php $assets->data_seek(0); while ($a = $assets->fetch_assoc()): ?><option value="<?= $a['id'] ?>"><?= e($a['asset_tag']) ?></option><?php endwhile; ?></select></label>
+        <label>Date<input name="usage_date" type="date" value="<?= date('Y-m-d') ?>" required></label><label>Active hours<input name="active_hours" type="number" min="0" max="24" step="0.1" required></label><label>System crashes<input name="crash_count" type="number" min="0" value="0" required></label><label>Battery health (%)<input name="battery_health_percent" type="number" min="0" max="100"></label><button type="submit">Save usage</button></form>
     </div>
 
 </section>
@@ -214,13 +214,14 @@ layout_start('Maintenance');
                 <th>Warranty</th>
                 <th>Repair records</th>
                 <th>Open repairs</th>
-                <th>Risk signal</th>
+                <th>30-day usage</th>
+                <th>Predicted failure risk</th>
             </tr>
         </thead>
 
         <tbody>
 
-            <?php while ($r = $risks->fetch_assoc()): ?>
+            <?php while ($r = $risks->fetch_assoc()): $prediction = maintenance_risk($r); ?>
 
                 <tr>
 
@@ -245,8 +246,11 @@ layout_start('Maintenance');
                         <?= $r['open_repairs'] ?>
                     </td>
 
-                    <td class="<?= $r['risk'] === 'Normal' ? '' : 'danger' ?>">
-                        <?= e($r['risk']) ?>
+                <?= e((string)($r['active_hours_30d'] ?? 0)) ?> hrs,
+                <?= e((string)($r['crash_count_30d'] ?? 0)) ?> crashes
+                    <td class="<?= $prediction['level'] === 'Low' ? '' : 'danger' ?>">
+                        <b><?= e($prediction['level']) ?></b> — <?= number_format($prediction['score'] * 100, 1) ?>%<br>
+                        <small><?= e($prediction['version']) ?></small>
                     </td>
 
                 </tr>
