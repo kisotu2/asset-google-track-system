@@ -41,3 +41,72 @@ CREATE TABLE IF NOT EXISTS maintenance_risk_predictions (
     INDEX idx_risk_laptop_time (laptop_id, predicted_at),
     FOREIGN KEY (laptop_id) REFERENCES laptops(id) ON DELETE CASCADE
 );
+
+
+USE ira_assets;
+
+CREATE TABLE IF NOT EXISTS laptop_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    laptop_id INT NOT NULL,
+    user_id INT NULL,
+    admin_id INT NULL,
+    action_type VARCHAR(100) NOT NULL,
+    action_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_laptop_history_laptop (laptop_id),
+    INDEX idx_laptop_history_user (user_id),
+    INDEX idx_laptop_history_admin (admin_id),
+    INDEX idx_laptop_history_date (action_date),
+
+    FOREIGN KEY (laptop_id)
+        REFERENCES laptops(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    FOREIGN KEY (admin_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS software_history (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    software_id INT NOT NULL,
+    user_id INT NULL,
+    admin_id INT NULL,
+    action_type VARCHAR(100) NOT NULL,
+    action_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    INDEX idx_software_history_software (software_id),
+    INDEX idx_software_history_user (user_id),
+    INDEX idx_software_history_admin (admin_id),
+    INDEX idx_software_history_date (action_date),
+
+    FOREIGN KEY (software_id)
+        REFERENCES softwares(id)
+        ON DELETE CASCADE,
+
+    FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    FOREIGN KEY (admin_id)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+);
+
+USE ira_assets;
+
+CREATE TABLE IF NOT EXISTS softwares (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    software_name VARCHAR(150) NOT NULL,
+    version VARCHAR(100) NULL,
+    license_key VARCHAR(255) NULL,
+    license_expiry DATE NULL,
+    total_licenses INT NOT NULL DEFAULT 1,
+    available_licenses INT NOT NULL DEFAULT 1,
+    status ENUM('Active','Expired','Suspended') NOT NULL DEFAULT 'Active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
