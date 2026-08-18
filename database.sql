@@ -110,3 +110,9 @@ CREATE TABLE IF NOT EXISTS softwares (
     status ENUM('Active','Expired','Suspended') NOT NULL DEFAULT 'Active',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE users
+ADD COLUMN username VARCHAR(100) NULL UNIQUE AFTER full_name,
+ADD COLUMN employee_number VARCHAR(100) NULL UNIQUE AFTER username,
+ADD COLUMN department VARCHAR(150) NULL AFTER email,
+ADD COLUMN directory_source VARCHAR(50) NOT NULL DEFAULT 'manual' AFTER department;

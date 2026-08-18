@@ -1,17 +1,14 @@
 <?php
+
+declare(strict_types=1);
+
 error_reporting(E_ALL);
 ini_set('display_errors', '1');
 ini_set('display_startup_errors', '1');
-require_once 'db.php';
-session_start();
 
-/* =====================================================
-   ACCESS CONTROL
-===================================================== */
-if (!isset($_SESSION['role'])) {
-    header("Location: login.php");
-    exit();
-}
+require __DIR__ . '/bootstrap.php';
+
+require_login(['admin', 'super_admin']);
 
 /* =====================================================
    FILTER VARIABLES
@@ -109,9 +106,18 @@ $result = $stmt->get_result();
 ===================================================== */
 
 $chartQuery = "
-SELECT action_type, COUNT(*) AS total
-FROM laptop_history
-GROUP BY action_type
+    SELECT action_type, COUNT(*) AS total
+    FROM (
+        SELECT action_type
+        FROM laptop_history
+
+        UNION ALL
+
+        SELECT action_type
+        FROM software_history
+    ) AS history
+    GROUP BY action_type
+    ORDER BY total DESC
 ";
 
 $chartResult = $conn->query($chartQuery);
@@ -119,7 +125,7 @@ $chartResult = $conn->query($chartQuery);
 $chartData = [];
 
 while ($row = $chartResult->fetch_assoc()) {
-    $chartData[$row['action_type']] = $row['total'];
+    $chartData[$row['action_type']] = (int)$row['total'];
 }
 
 /* =====================================================
@@ -138,7 +144,7 @@ ORDER BY full_name
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Laptop Assignment History</title>
+<title>Asset Assignment History</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
