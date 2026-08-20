@@ -5,6 +5,15 @@ session_start();
 
 require_once __DIR__ . '/db.php';
 
+$autoload = __DIR__ . '/vendor/autoload.php';
+
+if (is_file($autoload)) {
+    require_once $autoload;
+}
+
+use PHPMailer\PHPMailer\Exception;
+use PHPMailer\PHPMailer\PHPMailer;
+
 
 /**
  * Escape HTML output
@@ -28,6 +37,306 @@ function config(): array
     }
 
     return $c;
+}
+/**
+ * Generate a secure six-digit OTP.
+ */
+function generate_otp(): string
+{
+    return (string) random_int(100000, 999999);
+}
+
+
+/**
+ * Send login OTP to the user's email.
+ */
+function send_login_otp(
+    string $recipientEmail,
+    string $recipientName,
+    string $otp
+): bool {
+
+    $config = config();
+
+    $mail = new PHPMailer(true);
+
+    try {
+
+        $mail->isSMTP();
+
+        $mail->Host = $config['mail_host'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $config['mail_username'];
+        $mail->Password = $config['mail_password'];
+
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = (int) $config['mail_port'];
+
+        $mail->CharSet = 'UTF-8';
+
+        $mail->setFrom(
+            $config['mail_from'],
+            $config['mail_from_name'] ?? 'IRA Asset Management System'
+        );
+
+        $mail->addAddress(
+            $recipientEmail,
+            $recipientName
+        );
+
+        $mail->isHTML(true);
+
+        $mail->Subject = 'Your IRA Asset Management Login Code';
+
+        $safeName = e($recipientName);
+        $safeOtp = e($otp);
+
+        $mail->Body = <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login Verification Code</title>
+</head>
+
+<body style="
+    margin:0;
+    padding:0;
+    background:#f4f4f4;
+    font-family:Arial,Helvetica,sans-serif;
+">
+
+<div style="
+    max-width:600px;
+    margin:40px auto;
+    background:#ffffff;
+    padding:35px;
+    border-radius:10px;
+">
+
+    <h2 style="margin-top:0;color:#333;">
+        IRA Asset Management
+    </h2>
+
+    <p>
+        Hello {$safeName},
+    </p>
+
+    <p>
+        Someone is attempting to sign in to your
+        IRA Asset Management account.
+    </p>
+
+    <p>
+        Your login verification code is:
+    </p>
+
+    <div style="
+        font-size:32px;
+        font-weight:bold;
+        letter-spacing:8px;
+        text-align:center;
+        padding:20px;
+        background:#f5f5f5;
+        border-radius:8px;
+        margin:25px 0;
+    ">
+        {$safeOtp}
+    </div>
+
+    <p>
+        This code will expire in
+        <strong>10 minutes</strong>.
+    </p>
+
+    <p>
+        If you did not attempt to sign in, you can safely
+        ignore this email.
+    </p>
+
+    <hr>
+
+    <p style="font-size:12px;color:#777;">
+        This is an automated message from the
+        IRA Asset Management System.
+    </p>
+
+</div>
+
+</body>
+</html>
+HTML;
+
+        $mail->AltBody =
+            "Hello {$recipientName},\n\n" .
+            "Your IRA Asset Management login verification code is: {$otp}\n\n" .
+            "This code will expire in 10 minutes.\n\n" .
+            "If you did not attempt to sign in, ignore this email.";
+
+        return $mail->send();
+
+    } catch (Exception $e) {
+
+        error_log(
+            'OTP email error: ' . $mail->ErrorInfo
+        );
+
+        return false;
+    }
+}
+
+
+/**
+ * Generate and store a login OTP for a user.
+ */
+function create_login_otp(
+    mysqli $conn,
+    int $userId
+): string {
+
+    $config = config();
+
+    // Generate a secure 6-digit OTP.
+    $otp = generate_otp();
+
+    // Hash the OTP before storing it.
+    $otpHash = password_hash(
+        $otp,
+        PASSWORD_DEFAULT
+    );
+
+    $expiryMinutes = (int) (
+        $config['otp_expiry_minutes'] ?? 10
+    );
+
+    $expiresAt = date(
+        'Y-m-d H:i:s',
+        time() + ($expiryMinutes * 60)
+    );
+
+    /*
+     * Store the hashed OTP and expiry directly
+     * in the users table.
+     */
+    $stmt = $conn->prepare(
+        "UPDATE users
+         SET otp_code = ?,
+             otp_expiry = ?
+         WHERE id = ?"
+    );
+
+    $stmt->bind_param(
+        'ssi',
+        $otpHash,
+        $expiresAt,
+        $userId
+    );
+
+    $stmt->execute();
+
+    $stmt->close();
+
+    return $otp;
+}
+
+/**
+ * Verify a user's login OTP.
+ *
+ * OTPs are single-use. Once successfully verified,
+ * the OTP and its expiry are immediately removed.
+ */
+function verify_login_otp(
+    mysqli $conn,
+    int $userId,
+    string $otp
+): bool {
+
+    $stmt = $conn->prepare(
+        "SELECT otp_code, otp_expiry
+         FROM users
+         WHERE id = ?
+         LIMIT 1"
+    );
+
+    $stmt->bind_param(
+        'i',
+        $userId
+    );
+
+    $stmt->execute();
+
+    $user = $stmt
+        ->get_result()
+        ->fetch_assoc();
+
+    $stmt->close();
+
+    /*
+     * No OTP exists.
+     */
+    if (!$user || empty($user['otp_code'])) {
+        return false;
+    }
+
+    /*
+     * OTP has expired.
+     */
+    if (
+        empty($user['otp_expiry']) ||
+        strtotime($user['otp_expiry']) < time()
+    ) {
+
+        // Remove expired OTP.
+        $stmt = $conn->prepare(
+            "UPDATE users
+             SET otp_code = NULL,
+                 otp_expiry = NULL
+             WHERE id = ?"
+        );
+
+        $stmt->bind_param(
+            'i',
+            $userId
+        );
+
+        $stmt->execute();
+        $stmt->close();
+
+        return false;
+    }
+
+    /*
+     * Check whether the supplied OTP matches
+     * the stored hash.
+     */
+    if (!password_verify($otp, $user['otp_code'])) {
+        return false;
+    }
+
+    /*
+     * OTP is correct.
+     *
+     * IMPORTANT:
+     * Immediately delete it so it cannot
+     * ever be used again.
+     */
+    $stmt = $conn->prepare(
+        "UPDATE users
+         SET otp_code = NULL,
+             otp_expiry = NULL
+         WHERE id = ?"
+    );
+
+    $stmt->bind_param(
+        'i',
+        $userId
+    );
+
+    $stmt->execute();
+
+    $stmt->close();
+
+    return true;
 }
 
 
