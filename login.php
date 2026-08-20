@@ -1,18 +1,8 @@
 <?php
-<<<<<<< HEAD
 
 require __DIR__ . '/bootstrap.php';
 
 // If the user is already logged in, take them straight to the dashboard.
-=======
-error_reporting(E_ALL);
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
-
-require __DIR__ . '/bootstrap.php';
-
-// Already authenticated.
->>>>>>> 81f8c5e (2FA Authentication)
 if (!empty($_SESSION['user_id'])) {
     header('Location: dashboard.php');
     exit;
@@ -22,74 +12,21 @@ $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-<<<<<<< HEAD
-    // Make sure the form request is valid.
-=======
->>>>>>> 81f8c5e (2FA Authentication)
+    // Verify CSRF token.
     verify_csrf();
 
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
 
-<<<<<<< HEAD
-    // Look for the user using their email address.
-    $stmt = $conn->prepare(
-        "SELECT id, full_name, password, role, status
-         FROM users
-         WHERE email = ?
-         LIMIT 1"
-    );
-
-    $stmt->bind_param('s', $email);
-    $stmt->execute();
-
-    $user = $stmt->get_result()->fetch_assoc();
-
-    /*
-     * The login is only successful when:
-     * 1. The account exists.
-     * 2. The account is active.
-     * 3. The password matches.
-     */
-    $loginSuccessful =
-        $user &&
-        $user['status'] === 'active' &&
-        password_verify($password, $user['password']);
-
-    if (!$loginSuccessful) {
-
-        // Keep the message general so we don't reveal whether
-        // an email exists in the system.
-        $error = 'Invalid email, password, or account status.';
-
-    } else {
-
-        // Create a new session ID after successful login
-        // to help protect against session fixation.
-        session_regenerate_id(true);
-
-        $_SESSION['user_id'] = (int) $user['id'];
-        $_SESSION['role'] = $user['role'];
-        $_SESSION['name'] = $user['full_name'];
-
-        // Record the login in the system audit trail.
-        audit(
-            $conn,
-            'login',
-            'user',
-            (int) $user['id']
-        );
-
-        // Send the user to their dashboard.
-        header('Location: dashboard.php');
-        exit;
-=======
     if ($email === '' || $password === '') {
 
         $error = 'Please enter your email and password.';
 
     } else {
 
+        /*
+         * Find the user by email.
+         */
         $stmt = $conn->prepare(
             "SELECT id, full_name, email, password, role, status
              FROM users
@@ -110,6 +47,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $stmt->close();
 
+        /*
+         * Login succeeds only when:
+         *
+         * 1. The account exists.
+         * 2. The account is active.
+         * 3. The password is correct.
+         */
         $loginSuccessful =
             $user &&
             $user['status'] === 'active' &&
@@ -120,17 +64,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$loginSuccessful) {
 
+            /*
+             * Keep the error generic so we don't reveal
+             * whether an email address exists.
+             */
             $error =
                 'Invalid email, password, or account status.';
 
         } else {
 
             /*
-             * Generate the OTP.
+             * Generate a new OTP.
+             *
+             * This also invalidates/replaces any previous OTP.
              */
             $otp = create_login_otp(
                 $conn,
-                (int)$user['id']
+                (int) $user['id']
             );
 
             /*
@@ -153,10 +103,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 /*
                  * Do NOT authenticate the user yet.
                  *
-                 * Store only temporary login information.
+                 * Store temporary login information.
                  */
                 $_SESSION['pending_login_user_id'] =
-                    (int)$user['id'];
+                    (int) $user['id'];
 
                 $_SESSION['pending_login_email'] =
                     $user['email'];
@@ -167,9 +117,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['pending_login_role'] =
                     $user['role'];
 
-                $_SESSION['otp_sent_at'] =
-                    time();
+                /*
+                 * Used by the resend cooldown.
+                 */
+                $_SESSION['otp_sent_at'] = time();
 
+                /*
+                 * Redirect to OTP verification.
+                 */
                 header(
                     'Location: verify_otp.php'
                 );
@@ -177,21 +132,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
         }
->>>>>>> 81f8c5e (2FA Authentication)
     }
 }
 
 layout_start('Sign in');
 ?>
 
-<<<<<<< HEAD
-<section class="panel" style="max-width: 460px; margin: 70px auto;">
-=======
 <section
     class="panel"
     style="max-width:460px;margin:70px auto;"
 >
->>>>>>> 81f8c5e (2FA Authentication)
 
     <h1>Welcome back</h1>
 
@@ -200,17 +150,11 @@ layout_start('Sign in');
     </p>
 
     <?php if ($error): ?>
-<<<<<<< HEAD
-        <p class="notice error">
-            <?= e($error) ?>
-        </p>
-=======
 
         <p class="notice error">
             <?= e($error) ?>
         </p>
 
->>>>>>> 81f8c5e (2FA Authentication)
     <?php endif; ?>
 
     <form method="post">
@@ -218,19 +162,12 @@ layout_start('Sign in');
         <input
             type="hidden"
             name="csrf"
-<<<<<<< HEAD
-            value="<?= csrf() ?>"
-=======
             value="<?= e(csrf()) ?>"
->>>>>>> 81f8c5e (2FA Authentication)
         >
 
         <label>
             Email
-<<<<<<< HEAD
-=======
 
->>>>>>> 81f8c5e (2FA Authentication)
             <input
                 type="email"
                 name="email"
@@ -242,10 +179,7 @@ layout_start('Sign in');
 
         <label>
             Password
-<<<<<<< HEAD
-=======
 
->>>>>>> 81f8c5e (2FA Authentication)
             <input
                 type="password"
                 name="password"
@@ -256,24 +190,19 @@ layout_start('Sign in');
         </label>
 
         <button type="submit">
-<<<<<<< HEAD
-            Sign in
-=======
             Continue
->>>>>>> 81f8c5e (2FA Authentication)
         </button>
 
     </form>
 
     <p class="muted">
-        First time setting up the system?
-<<<<<<< HEAD
-=======
 
->>>>>>> 81f8c5e (2FA Authentication)
+        First time setting up the system?
+
         <a href="create_super_admin.php">
             Create the super administrator
         </a>.
+
     </p>
 
 </section>

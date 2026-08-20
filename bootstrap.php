@@ -187,7 +187,9 @@ HTML;
 
 
 /**
- * Generate and store a login OTP for a user.
+ * Generate and store a new login OTP.
+ *
+ * A new OTP automatically invalidates the previous OTP.
  */
 function create_login_otp(
     mysqli $conn,
@@ -199,7 +201,7 @@ function create_login_otp(
     // Generate a secure 6-digit OTP.
     $otp = generate_otp();
 
-    // Hash the OTP before storing it.
+    // Never store the actual OTP.
     $otpHash = password_hash(
         $otp,
         PASSWORD_DEFAULT
@@ -215,13 +217,15 @@ function create_login_otp(
     );
 
     /*
-     * Store the hashed OTP and expiry directly
-     * in the users table.
+     * Store the new OTP and reset attempts.
+     *
+     * This automatically invalidates any previous OTP.
      */
     $stmt = $conn->prepare(
         "UPDATE users
          SET otp_code = ?,
-             otp_expiry = ?
+             otp_expiry = ?,
+             otp_attempts = 0
          WHERE id = ?"
     );
 
@@ -242,8 +246,9 @@ function create_login_otp(
 /**
  * Verify a user's login OTP.
  *
- * OTPs are single-use. Once successfully verified,
- * the OTP and its expiry are immediately removed.
+ * Maximum attempts: 5.
+ *
+ * OTPs are single-use.
  */
 function verify_login_otp(
     mysqli $conn,
@@ -251,8 +256,16 @@ function verify_login_otp(
     string $otp
 ): bool {
 
+    $config = config();
+
+    $maxAttempts = (int) (
+        $config['otp_max_attempts'] ?? 5
+    );
+
     $stmt = $conn->prepare(
-        "SELECT otp_code, otp_expiry
+        "SELECT otp_code,
+                otp_expiry,
+                otp_attempts
          FROM users
          WHERE id = ?
          LIMIT 1"
@@ -279,7 +292,7 @@ function verify_login_otp(
     }
 
     /*
-     * OTP has expired.
+     * Check whether the OTP has expired.
      */
     if (
         empty($user['otp_expiry']) ||
@@ -290,7 +303,8 @@ function verify_login_otp(
         $stmt = $conn->prepare(
             "UPDATE users
              SET otp_code = NULL,
-                 otp_expiry = NULL
+                 otp_expiry = NULL,
+                 otp_attempts = 0
              WHERE id = ?"
         );
 
@@ -306,24 +320,74 @@ function verify_login_otp(
     }
 
     /*
-     * Check whether the supplied OTP matches
-     * the stored hash.
+     * Check maximum attempts.
      */
-    if (!password_verify($otp, $user['otp_code'])) {
+    if (
+        (int)$user['otp_attempts'] >=
+        $maxAttempts
+    ) {
+
+        // Invalidate the OTP.
+        $stmt = $conn->prepare(
+            "UPDATE users
+             SET otp_code = NULL,
+                 otp_expiry = NULL,
+                 otp_attempts = 0
+             WHERE id = ?"
+        );
+
+        $stmt->bind_param(
+            'i',
+            $userId
+        );
+
+        $stmt->execute();
+        $stmt->close();
+
+        return false;
+    }
+
+    /*
+     * Check the supplied OTP.
+     */
+    if (
+        !password_verify(
+            $otp,
+            $user['otp_code']
+        )
+    ) {
+
+        /*
+         * Increase failed attempts.
+         */
+        $stmt = $conn->prepare(
+            "UPDATE users
+             SET otp_attempts = otp_attempts + 1
+             WHERE id = ?"
+        );
+
+        $stmt->bind_param(
+            'i',
+            $userId
+        );
+
+        $stmt->execute();
+        $stmt->close();
+
         return false;
     }
 
     /*
      * OTP is correct.
      *
-     * IMPORTANT:
      * Immediately delete it so it cannot
      * ever be used again.
      */
     $stmt = $conn->prepare(
         "UPDATE users
          SET otp_code = NULL,
-             otp_expiry = NULL
+             otp_expiry = NULL,
+             otp_attempts = 0
          WHERE id = ?"
     );
 
@@ -333,12 +397,10 @@ function verify_login_otp(
     );
 
     $stmt->execute();
-
     $stmt->close();
 
     return true;
 }
-
 
 /**
  * Generate CSRF token
