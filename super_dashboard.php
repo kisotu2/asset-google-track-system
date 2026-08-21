@@ -1,4 +1,9 @@
 <?php
+
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+
 require 'db.php';
 session_start();
 
@@ -310,7 +315,7 @@ function filterAssets(type){
 <a href="#" onclick="showSection('registerUser')"><i class="fa fa-user"></i> Register User</a>
 <a href="software_dashboard.php"><i class="fa fa-box"></i> Software Monitoring</a>
 <a href="#" onclick="showAssetsSection()"><i class="fa fa-boxes"></i> Assets</a>
-<a href="issue_software.php"><i class="fa fa-key"></i> Laptop Issue</a>
+<a href="software_dashboard.php"><i class="fa fa-key"></i> Licence Assignment</a>
 <a href="logout.php"><i class="fa fa-sign-out-alt"></i> Logout</a>
 </div>
 

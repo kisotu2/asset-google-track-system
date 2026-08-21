@@ -1,145 +1,28 @@
 <?php
-require 'db.php';
-session_start();
+declare(strict_types=1);
+require __DIR__ . '/bootstrap.php';
+require_login(['admin', 'super_admin']);
+$id = (int) ($_GET['id'] ?? 0);
+if ($id < 1) { header('Location: software_dashboard.php'); exit; }
 
-// Ensure user is logged in
-if(!isset($_SESSION['user_id'])){
-    header("Location: login.php");
-    exit();
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf();
+    $assignmentId = (int) ($_POST['assignment_id'] ?? 0); $adminId = (int) $_SESSION['user_id'];
+    $assignment = $conn->prepare('SELECT software_id, user_id FROM software_assignments WHERE id=? AND software_id=? AND revoked_at IS NULL');
+    $assignment->bind_param('ii', $assignmentId, $id); $assignment->execute(); $row = $assignment->get_result()->fetch_assoc();
+    if (!$row) { flash('That assignment is no longer active.', 'error'); }
+    else { $stmt = $conn->prepare('UPDATE software_assignments SET revoked_at=NOW(), revoked_by=? WHERE id=? AND revoked_at IS NULL'); $stmt->bind_param('ii', $adminId, $assignmentId); $stmt->execute();
+        $history = $conn->prepare("INSERT INTO software_history (software_id,user_id,admin_id,action_type) VALUES (?,?,?,'Licence revoked')"); $history->bind_param('iii', $id, $row['user_id'], $adminId); $history->execute(); audit($conn, 'software_revoked', 'software', $id, ['assignment_id' => $assignmentId]); flash('Licence assignment revoked.'); }
+    header('Location: software_details.php?id=' . $id); exit;
 }
-
-// Check if ID is provided
-if(!isset($_GET['id'])){
-    header("Location: admin_dashboard.php");
-    exit();
-}
-
-$id = intval($_GET['id']);
-
-$stmt = $conn->prepare("SELECT * FROM softwares WHERE id=?");
-$stmt->bind_param("i", $id);
-$stmt->execute();
-$result = $stmt->get_result();
-
-if($result->num_rows == 0){
-    echo "<h2>Software not found</h2>";
-    exit();
-}
-
-$software = $result->fetch_assoc();
-
-// Calculate available licenses
-$available = $software['total_licenses'] - $software['used_licenses'];
+$stmt = $conn->prepare('SELECT s.*, COUNT(sa.id) used_licenses FROM softwares s LEFT JOIN software_assignments sa ON sa.software_id=s.id AND sa.revoked_at IS NULL WHERE s.id=? GROUP BY s.id'); $stmt->bind_param('i', $id); $stmt->execute(); $software = $stmt->get_result()->fetch_assoc();
+if (!$software) { http_response_code(404); exit('Software record not found.'); }
+$assignments = $conn->prepare('SELECT sa.id, sa.assigned_date, u.full_name, u.email, issuer.full_name AS assigned_by_name FROM software_assignments sa JOIN users u ON u.id=sa.user_id LEFT JOIN users issuer ON issuer.id=sa.assigned_by WHERE sa.software_id=? AND sa.revoked_at IS NULL ORDER BY u.full_name'); $assignments->bind_param('i', $id); $assignments->execute(); $assignments = $assignments->get_result();
+$available = max(0, (int) $software['total_licenses'] - (int) $software['used_licenses']);
+layout_start('Software details');
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Software Details</title>
-
-<style>
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #f0f2f5;
-    margin: 0;
-    padding: 0;
-}
-
-.container {
-    max-width: 600px;
-    margin: 50px auto;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-    padding: 30px 40px;
-    position: relative;
-}
-
-h2 {
-    text-align: center;
-    margin-bottom: 25px;
-    color: #333;
-}
-
-.detail {
-    margin-bottom: 15px;
-    font-size: 16px;
-    line-height: 1.5;
-    color: #555;
-}
-
-.label {
-    font-weight: 600;
-    color: #222;
-}
-
-.backBtn {
-    position: absolute;
-    top: 20px;
-    right: 20px;
-    padding: 8px 16px;
-    background: #007bff;
-    border: none;
-    color: white;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 14px;
-    transition: background 0.2s ease;
-}
-
-.backBtn:hover {
-    background: #0056b3;
-}
-
-.license-bar-container {
-    background: #e0e0e0;
-    border-radius: 10px;
-    overflow: hidden;
-    height: 20px;
-    margin-top: 5px;
-}
-
-.license-bar-used {
-    background: #28a745;
-    height: 100%;
-    width: <?php echo $software['used_licenses'] / max($software['total_licenses'],1) * 100; ?>%;
-    transition: width 0.5s ease;
-}
-
-.license-text {
-    font-size: 14px;
-    margin-top: 5px;
-    color: #333;
-}
-</style>
-
-</head>
-<body>
-
-<div class="container">
-
-<button class="backBtn" onclick="window.location.href='super_dashboard.php'">← Back</button>
-
-<h2><?php echo $software['software_name']; ?></h2>
-
-<div class="detail"><span class="label">Vendor:</span> <?php echo $software['vendor'] ?? 'N/A'; ?></div>
-<div class="detail"><span class="label">License Type:</span> <?php echo $software['license_type'] ?? 'N/A'; ?></div>
-<div class="detail"><span class="label">Total Licenses:</span> <?php echo $software['total_licenses'] ?? 0; ?></div>
-<div class="detail"><span class="label">Used Licenses:</span> <?php echo $software['used_licenses'] ?? 0; ?></div>
-<div class="detail">
-    <span class="label">Available Licenses:</span> <?php echo $available; ?>
-    <div class="license-bar-container">
-        <div class="license-bar-used"></div>
-    </div>
-    <div class="license-text"><?php echo $software['used_licenses']; ?> / <?php echo $software['total_licenses']; ?> used</div>
-</div>
-<div class="detail"><span class="label">Purchase Date:</span> <?php echo $software['purchase_date'] ?? 'N/A'; ?></div>
-<div class="detail"><span class="label">Expiry Date:</span> <?php echo $software['expiry_date'] ?? 'N/A'; ?></div>
-<div class="detail"><span class="label">Cost:</span> $<?php echo $software['cost'] ?? 0; ?></div>
-<div class="detail"><span class="label">Notes:</span> <?php echo $software['notes'] ?? 'No notes available'; ?></div>
-
-</div>
-
-</body>
-</html>
+<section class="hero"><div><div class="eyebrow">SOFTWARE LICENCE</div><h1><?= e($software['software_name']) ?></h1><p><?= e(trim($software['vendor'] . ' ' . ($software['version'] ?? ''))) ?: 'Software inventory record' ?></p></div><a class="button secondary" href="software_dashboard.php">Back to inventory</a></section>
+<section class="grid"><article class="card metric"><b><?= e((string) $software['total_licenses']) ?></b><span>Total seats</span></article><article class="card metric"><b><?= e((string) $software['used_licenses']) ?></b><span>Assigned seats</span></article><article class="card metric"><b><?= e((string) $available) ?></b><span>Available seats</span></article><article class="card metric"><b><?= e($software['expiry_date'] ?: 'N/A') ?></b><span>Licence expiry</span></article></section>
+<section class="split" style="margin-top:24px"><div class="panel"><h2>Licence information</h2><p><strong>Type:</strong> <?= e($software['license_type']) ?></p><p><strong>Status:</strong> <?= e($software['status']) ?></p><p><strong>Purchase date:</strong> <?= e($software['purchase_date'] ?: 'Not recorded') ?></p><p><strong>Cost:</strong> <?= e(number_format((float) $software['cost'], 2)) ?></p></div><div class="panel"><h2>Notes</h2><p class="muted"><?= e($software['notes'] ?: 'No notes recorded for this software.') ?></p></div></section>
+<section class="panel" style="margin-top:24px"><div class="panel-header"><div><h2>Assigned users</h2><span>Revoke access when a licence is no longer required.</span></div></div><div class="table-wrapper"><table><thead><tr><th>User</th><th>Assigned on</th><th>Assigned by</th><th></th></tr></thead><tbody><?php while ($assignment = $assignments->fetch_assoc()): ?><tr><td><strong><?= e($assignment['full_name']) ?></strong><br><small><?= e($assignment['email']) ?></small></td><td><?= e($assignment['assigned_date']) ?></td><td><?= e($assignment['assigned_by_name'] ?: 'System') ?></td><td><form method="post"><input type="hidden" name="csrf" value="<?= csrf() ?>"><input type="hidden" name="assignment_id" value="<?= $assignment['id'] ?>"><button class="danger" type="submit">Revoke</button></form></td></tr><?php endwhile; ?></tbody></table></div></section>
+<?php layout_end();

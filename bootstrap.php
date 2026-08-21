@@ -514,6 +514,23 @@ function audit(
     $stmt->execute();
 }
 
+function current_user(): array
+{
+    return [
+        'id' => (int) ($_SESSION['user_id'] ?? 0),
+        'name' => (string) ($_SESSION['name'] ?? $_SESSION['user_name'] ?? ''),
+        'email' => (string) ($_SESSION['email'] ?? ''),
+        'role' => (string) ($_SESSION['role'] ?? ''),
+    ];
+}
+
+function nav_item(string $label, string $url, string $icon, string $currentPage): string
+{
+    $active = basename($url) === $currentPage ? ' active' : '';
+    return '<a class="nav-link' . $active . '" href="' . e($url) . '"><span class="nav-icon">'
+        . $icon . '</span><span>' . e($label) . '</span></a>';
+}
+
 
 /**
  * Start page layout
@@ -521,100 +538,29 @@ function audit(
 function layout_start(string $title): void
 {
     $flash = flash();
+    $user = current_user();
+    $role = $user['role'];
+    $currentPage = basename($_SERVER['PHP_SELF']);
     ?>
 
-    <!doctype html>
-
-    <html lang="en">
-
-    <head>
-
-        <meta charset="utf-8">
-
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1"
-        >
-
-        <title>
-            <?= e($title) ?> · Asset Management
-        </title>
-
-        <link
-            rel="stylesheet"
-            href="assets/css/app.css"
-        >
-
-    </head>
-
-    <body>
-
-        <header>
-
-            <a
-                class="brand"
-                href="dashboard.php"
-            >
-                IRA Asset Management
-            </a>
-
-            <?php if (!empty($_SESSION['user_id'])): ?>
-
-                <nav>
-
-                    <a href="dashboard.php">
-                        Dashboard
-                    </a>
-
-                    <?php if (
-                        in_array(
-                            $_SESSION['role'] ?? '',
-                            ['admin', 'super_admin'],
-                            true
-                        )
-                    ): ?>
-
-                        <a href="locations.php">
-                            Locations
-                        </a>
-
-                        <a href="maintenance.php">
-                            Maintenance
-                        </a>
-
-                        <?php if (($_SESSION['role'] ?? '') === 'super_admin'): ?>
-
-                            <a href="users.php">
-                                Users
-                            </a>
-
-                        <?php endif; ?>
-
-                    <?php endif; ?>
-
-                    <a href="check_in.php">
-                        Location check-in
-                    </a>
-
-                    <a href="logout.php">
-                        Sign out
-                    </a>
-
-                </nav>
-
-            <?php endif; ?>
-
-        </header>
-
-        <main>
-
-            <?php if ($flash): ?>
-
-                <p class="notice <?= e($flash[0]) ?>">
-                    <?= e($flash[1]) ?>
-                </p>
-
-            <?php endif; ?>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#b08116"><title><?= e($title) ?> · IRA Asset Management</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="assets/css/app.css"></head><body>
+<div class="app-shell">
+<aside class="sidebar" id="sidebar"><div class="sidebar-brand"><div class="brand-mark">IRA</div><div class="brand-copy"><strong>IRA</strong><span>Asset Management</span></div></div>
+<div class="sidebar-user"><div class="avatar"><?= e(strtoupper(substr($user['name'] ?: 'U', 0, 1))) ?></div><div class="sidebar-user-info"><strong><?= e($user['name'] ?: 'User') ?></strong><span><?= e(ucwords(str_replace('_', ' ', $role))) ?></span></div></div>
+<nav class="sidebar-nav"><div class="nav-section-title">WORKSPACE</div><?= nav_item('Dashboard', 'dashboard.php', '⌂', $currentPage) ?>
+<?php if (in_array($role, ['admin', 'super_admin'], true)): ?>
+<?= nav_item('Software licences', 'software_dashboard.php', '▣', $currentPage) ?>
+<?= nav_item('Software reports', 'software_reports.php', '▤', $currentPage) ?>
+<?= nav_item('Maintenance', 'maintenance.php', '⌁', $currentPage) ?>
+<?= nav_item('Locations', 'locations.php', '⌖', $currentPage) ?>
+<?= nav_item('History', 'history.php', '◷', $currentPage) ?>
+<?php endif; ?>
+<?= nav_item('Location check-in', 'check_in.php', '⌖', $currentPage) ?>
+<?php if ($role === 'super_admin'): ?><?= nav_item('Users', 'users.php', '♙', $currentPage) ?><?php endif; ?>
+</nav><div class="sidebar-footer"><span>IRA AMS</span><a href="logout.php">Sign out</a></div></aside>
+<div class="main-area"><header class="topbar"><button class="mobile-menu" type="button" aria-label="Open navigation" onclick="document.getElementById('sidebar').classList.toggle('sidebar-open')">☰</button><div class="topbar-title"><?= e($title) ?></div><div class="topbar-actions"><div class="system-status"><span class="status-dot"></span> System online</div><div class="topbar-profile"><div class="topbar-avatar"><?= e(strtoupper(substr($user['name'] ?: 'U', 0, 1))) ?></div><div><strong><?= e($user['name'] ?: 'User') ?></strong><small><?= e(ucwords(str_replace('_', ' ', $role))) ?></small></div></div></div></header>
+<main class="content"><?php if ($flash): ?><div class="notice <?= e($flash[0]) ?>"><?= e($flash[1]) ?></div><?php endif; ?>
 
     <?php
 }
@@ -626,12 +572,5 @@ function layout_start(string $title): void
 function layout_end(): void
 {
     ?>
-
-        </main>
-
-    </body>
-
-    </html>
-
-    <?php
+ </main></div></div></body></html><?php
 }

@@ -86,6 +86,12 @@ After collecting at least 30 labelled historical records, train a local model wi
 python3 ml/train_maintenance_model.py your_training_data.csv
 ```
 
+## Software licences
+
+Administrators can use **Software licences** from the application navigation to create software inventory records, assign available seats to active users, revoke access, review utilisation, and export a report. Licence usage is calculated from active assignment records, so revoking a user immediately returns a seat to the available pool.
+
+For an existing database, run [`migrations/20260821_add_software_licensing.sql`](migrations/20260821_add_software_licensing.sql) once in phpMyAdmin before opening the software pages. New installations receive the full software schema from `database.sql`.
+
 ## Project structure
 
 ```text

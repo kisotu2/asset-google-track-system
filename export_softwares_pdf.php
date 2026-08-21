@@ -1,41 +1,6 @@
 <?php
-
-use Com\Tecnick\Pdf\Tcpdf;
-
-require 'db.php';
-require_once(__DIR__ . '/tcpdf/tcpdf.php');
-
-$pdf=new Tcpdf();
-$pdf->AddPage();
-
-$html="<h2>IRA Software Report</h2>";
-
-$html.="<table border='1' cellpadding='5'>
-<tr>
-<th>ID</th>
-<th>Software</th>
-<th>Vendor</th>
-<th>License</th>
-<th>Total</th>
-<th>Expiry</th>
-</tr>";
-
-$result=$conn->query("SELECT * FROM softwares");
-
-while($row=$result->fetch_assoc()){
-
-$html.="<tr>
-<td>".$row['id']."</td>
-<td>".$row['software_name']."</td>
-<td>".$row['vendor']."</td>
-<td>".$row['license_type']."</td>
-<td>".$row['total_licenses']."</td>
-<td>".$row['expiry_date']."</td>
-</tr>";
-
-}
-
-$html.="</table>";
-
-$pdf->writeHTML($html);
-$pdf->Output("software_report.pdf","I");
+declare(strict_types=1);
+require __DIR__ . '/bootstrap.php';
+require_login(['admin', 'super_admin']);
+$result = $conn->query('SELECT s.*, COUNT(sa.id) AS used_licenses FROM softwares s LEFT JOIN software_assignments sa ON sa.software_id=s.id AND sa.revoked_at IS NULL GROUP BY s.id ORDER BY s.software_name, s.vendor');
+?><!doctype html><html lang="en"><head><meta charset="utf-8"><title>Software Licence Report</title><style>body{font:13px Arial;color:#1f2933;margin:32px}h1{margin:0 0 6px}p{color:#52606d}table{width:100%;border-collapse:collapse;margin-top:24px}th,td{border:1px solid #d9e2ec;padding:8px;text-align:left}th{background:#f0f4f8;font-size:11px;text-transform:uppercase}</style></head><body><h1>IRA Software Licence Report</h1><p>Generated <?= e(date('Y-m-d H:i')) ?></p><table><thead><tr><th>Software</th><th>Vendor</th><th>Type</th><th>Seats</th><th>Available</th><th>Expiry</th><th>Status</th></tr></thead><tbody><?php while ($row = $result->fetch_assoc()): ?><tr><td><?= e($row['software_name']) ?></td><td><?= e($row['vendor']) ?></td><td><?= e($row['license_type']) ?></td><td><?= e((string) $row['used_licenses']) ?> / <?= e((string) $row['total_licenses']) ?></td><td><?= e((string) ((int) $row['total_licenses'] - (int) $row['used_licenses'])) ?></td><td><?= e($row['expiry_date'] ?: 'No expiry') ?></td><td><?= e($row['status']) ?></td></tr><?php endwhile; ?></tbody></table><script>window.print()</script></body></html>

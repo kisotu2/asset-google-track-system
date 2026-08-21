@@ -1,473 +1,63 @@
 <?php
-require 'db.php';
-session_start();
+declare(strict_types=1);
+require __DIR__ . '/bootstrap.php';
+require_login(['admin', 'super_admin']);
 
-/* ===============================
-   ACCESS CONTROL
-=================================*/
-if(!isset($_SESSION['role']) || ($_SESSION['role'] != 'admin' && $_SESSION['role'] != 'super_admin')){
-    header("Location: login.php");
-    exit();
-}
-
-$message="";
-
-/* ===============================
-   ADD SOFTWARE LOGIC
-=================================*/
-if(isset($_POST['add_software'])){
-    $name = trim($_POST['software_name']);
-    $vendor = trim($_POST['vendor']);
-    $license = $_POST['license_type'];
-    $total = $_POST['total_licenses'];
-    $purchase = $_POST['purchase_date'];
-    $expiry = $_POST['expiry_date'];
-    $cost = $_POST['cost'];
-    $notes = $_POST['notes'];
-
-    $check = $conn->prepare("SELECT id FROM softwares WHERE software_name=? AND vendor=?");
-    $check->bind_param("ss",$name,$vendor);
-    $check->execute();
-    $check->store_result();
-
-    if($check->num_rows > 0){
-        $message = "⚠️ This software already exists in the system.";
-    }else{
-        $stmt = $conn->prepare("INSERT INTO softwares
-        (software_name,vendor,license_type,total_licenses,purchase_date,expiry_date,cost,notes)
-        VALUES (?,?,?,?,?,?,?,?)");
-        $stmt->bind_param("sssissds",$name,$vendor,$license,$total,$purchase,$expiry,$cost,$notes);
-
-        if($stmt->execute()){
-            $message = "✅ Software added successfully";
-        }else{
-            $message = "❌ Error adding software";
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    verify_csrf();
+    $action = $_POST['action'] ?? '';
+    if ($action === 'create') {
+        $name = trim($_POST['software_name'] ?? '');
+        $vendor = trim($_POST['vendor'] ?? '');
+        $version = trim($_POST['version'] ?? '') ?: null;
+        $type = $_POST['license_type'] ?? 'Subscription';
+        $total = max(1, (int) ($_POST['total_licenses'] ?? 1));
+        $purchase = $_POST['purchase_date'] ?: null;
+        $expiry = $_POST['expiry_date'] ?: null;
+        $cost = max(0, (float) ($_POST['cost'] ?? 0));
+        $notes = trim($_POST['notes'] ?? '') ?: null;
+        $allowed = ['Perpetual', 'Subscription', 'Free', 'Trial', 'Other'];
+        if ($name === '' || !in_array($type, $allowed, true)) {
+            flash('Enter a software name and a valid licence type.', 'error');
+        } else {
+            try {
+                $stmt = $conn->prepare('INSERT INTO softwares (software_name,vendor,version,license_type,total_licenses,purchase_date,expiry_date,cost,notes) VALUES (?,?,?,?,?,?,?,?,?)');
+                $stmt->bind_param('ssssissds', $name, $vendor, $version, $type, $total, $purchase, $expiry, $cost, $notes);
+                $stmt->execute();
+                audit($conn, 'software_created', 'software', $conn->insert_id, ['name' => $name]);
+                flash('Software licence record created.');
+            } catch (mysqli_sql_exception $exception) { flash('A matching software, vendor, and version record already exists.', 'error'); }
         }
     }
-}
-
-/* ===============================
-   RENEW LICENSE LOGIC
-=================================*/
-if(isset($_POST['renew_license'])){
-    $id = $_POST['license_id'];
-    $new_expiry = $_POST['new_expiry_date'];
-    $stmt = $conn->prepare("UPDATE softwares SET expiry_date=? WHERE id=?");
-    $stmt->bind_param("si", $new_expiry, $id);
-    if($stmt->execute()){
-        $message = "✅ License renewed successfully";
-    }else{
-        $message = "❌ Error renewing license";
+    if ($action === 'assign') {
+        $softwareId = (int) ($_POST['software_id'] ?? 0); $userId = (int) ($_POST['user_id'] ?? 0); $adminId = (int) $_SESSION['user_id'];
+        $conn->begin_transaction();
+        try {
+            $check = $conn->prepare('SELECT s.id FROM softwares s WHERE s.id=? AND s.status="Active" AND (s.expiry_date IS NULL OR s.expiry_date >= CURDATE()) AND (SELECT COUNT(*) FROM software_assignments sa WHERE sa.software_id=s.id AND sa.revoked_at IS NULL) < s.total_licenses FOR UPDATE');
+            $check->bind_param('i', $softwareId); $check->execute();
+            if (!$check->get_result()->fetch_assoc()) throw new RuntimeException('No active licence seat is available.');
+            $duplicate = $conn->prepare('SELECT id FROM software_assignments WHERE software_id=? AND user_id=? AND revoked_at IS NULL');
+            $duplicate->bind_param('ii', $softwareId, $userId); $duplicate->execute();
+            if ($duplicate->get_result()->fetch_assoc()) throw new RuntimeException('This user already has an active assignment for this software.');
+            $stmt = $conn->prepare('INSERT INTO software_assignments (software_id,user_id,assigned_by) VALUES (?,?,?)');
+            $stmt->bind_param('iii', $softwareId, $userId, $adminId); $stmt->execute();
+            $history = $conn->prepare("INSERT INTO software_history (software_id,user_id,admin_id,action_type) VALUES (?,?,?,'Licence assigned')");
+            $history->bind_param('iii', $softwareId, $userId, $adminId); $history->execute();
+            $conn->commit(); audit($conn, 'software_assigned', 'software', $softwareId, ['user_id' => $userId]); flash('Licence assigned.');
+        } catch (Throwable $exception) { $conn->rollback(); flash($exception->getMessage(), 'error'); }
     }
+    header('Location: software_dashboard.php'); exit;
 }
 
-/* ===============================
-   DELETE LICENSE LOGIC
-=================================*/
-if(isset($_POST['delete_license'])){
-    $id = $_POST['license_id'];
-    $stmt = $conn->prepare("DELETE FROM softwares WHERE id=?");
-    $stmt->bind_param("i", $id);
-    if($stmt->execute()){
-        $message = "✅ License deleted successfully";
-    }else{
-        $message = "❌ Error deleting license";
-    }
-}
-
-/* ===============================
-   FETCH SOFTWARES AND STATS
-=================================*/
-$today=date("Y-m-d");
-$warning=date("Y-m-d",strtotime("+30 days"));
-
-$total=$conn->query("SELECT COUNT(*) as t FROM softwares")->fetch_assoc()['t'];
-$expired=$conn->query("SELECT COUNT(*) as t FROM softwares WHERE expiry_date<'$today'")->fetch_assoc()['t'];
-$expiring=$conn->query("SELECT COUNT(*) as t FROM softwares WHERE expiry_date BETWEEN '$today' AND '$warning'")->fetch_assoc()['t'];
-$available=$conn->query("SELECT COUNT(*) as t FROM softwares WHERE expiry_date >= '$today'")->fetch_assoc()['t'];
-
-$alerts=$conn->query("SELECT software_name,expiry_date FROM softwares WHERE expiry_date BETWEEN '$today' AND '$warning'");
-
-$where="WHERE 1=1";
-
-if(!empty($_GET['software'])){
-    $software = $conn->real_escape_string($_GET['software']);
-    $where .= " AND software_name LIKE '%$software%'";
-}
-
-if(!empty($_GET['vendor'])){
-    $vendor = $conn->real_escape_string($_GET['vendor']);
-    $where .= " AND vendor LIKE '%$vendor%'";
-}
-
-if(!empty($_GET['status'])){
-    if($_GET['status']=="active"){
-        $where .= " AND expiry_date >= '$today'";
-    }
-    elseif($_GET['status']=="expired"){
-        $where .= " AND expiry_date < '$today'";
-    }
-    elseif($_GET['status']=="expiring"){
-        $where .= " AND expiry_date BETWEEN '$today' AND '$warning'";
-    }
-}
-
-$result=$conn->query("SELECT * FROM softwares $where ORDER BY expiry_date ASC");
+$today = date('Y-m-d');
+$summary = $conn->query("SELECT COUNT(*) total, COALESCE(SUM(status='Active' AND (expiry_date IS NULL OR expiry_date >= CURDATE())),0) active, COALESCE(SUM(expiry_date < CURDATE()),0) expired, COALESCE(SUM(expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)),0) expiring FROM softwares")->fetch_assoc();
+$softwares = $conn->query("SELECT s.*, COUNT(sa.id) used_licenses FROM softwares s LEFT JOIN software_assignments sa ON sa.software_id=s.id AND sa.revoked_at IS NULL GROUP BY s.id ORDER BY s.software_name, s.vendor");
+$users = $conn->query("SELECT id, full_name, email FROM users WHERE status='active' AND role='user' ORDER BY full_name");
+layout_start('Software licences');
 ?>
-
-<!DOCTYPE html>
-<html>
-<head>
-<title>IRA Software Dashboard</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-<style>
-/* BODY & RESET */
-body{
-    font-family: 'Segoe UI', Arial, sans-serif;
-    margin:0;
-    background:#f4f6f9;
-    display:flex;
-}
-
-/* SIDEBAR */
-.sidebar{
-    width:220px;
-    background:linear-gradient(180deg,#99bb4f,#b08116);
-    color:white;
-    height:100vh;
-    position:fixed;
-    top:0;
-    left:0;
-    display:flex;
-    flex-direction:column;
-}
-.sidebar h2{
-    text-align:center;
-    padding:20px 0;
-    font-size:20px;
-    border-bottom:1px solid rgba(255,255,255,0.2);
-}
-.sidebar a{
-    padding:15px 20px;
-    color:white;
-    text-decoration:none;
-    font-size:16px;
-    border-bottom:1px solid rgba(255,255,255,0.1);
-    transition:0.2s;
-    cursor:pointer;
-}
-.sidebar a:hover{
-    background:#1d2731;
-}
-
-/* MAIN CONTENT */
-.main{
-    margin-left:220px;
-    width:calc(100% - 220px);
-    padding:20px 30px;
-}
-
-/* HEADER */
-.header{
-    font-size:24px;
-    font-weight:bold;
-    color:#333;
-    margin-bottom:25px;
-}
-
-/* DASHBOARD CARDS */
-.cards{
-    display:flex;
-    gap:20px;
-    flex-wrap:wrap;
-    margin-bottom:30px;
-}
-.card{
-    flex:1;
-    min-width:180px;
-    background:#99bb4f;
-    padding:20px;
-    border-radius:12px;
-    color:white;
-    text-align:center;
-    box-shadow:0 4px 12px rgba(0,0,0,0.1);
-    transition:0.3s;
-    text-decoration:none; /* IMPORTANT */
-}
-.card:hover{
-    transform:translateY(-5px);
-    background:#b08116;
-}
-.card h3{
-    margin:0 0 10px 0;
-    font-size:16px;
-}
-.card p{
-    font-size:28px;
-    font-weight:bold;
-}
-
-/* ALERTS */
-.alert{
-    background:#ffe6e6;
-    border-left:6px solid #b08116;
-    padding:15px 20px;
-    border-radius:6px;
-    margin-bottom:25px;
-}
-
-/* FORM */
-form{
-    background:white;
-    padding:25px;
-    border-radius:10px;
-    box-shadow:0 4px 12px rgba(0,0,0,0.1);
-    margin-bottom:30px;
-}
-form h3{
-    margin-top:0;
-    color:#333;
-    margin-bottom:15px;
-}
-input,select,textarea{
-    width:100%;
-    padding:10px;
-    margin-top:8px;
-    margin-bottom:15px;
-    border:1px solid #ccc;
-    border-radius:6px;
-}
-button{
-    background:#99bb4f;
-    color:white;
-    border:none;
-    padding:12px 20px;
-    font-size:16px;
-    cursor:pointer;
-    border-radius:6px;
-    transition:0.3s;
-}
-button:hover{
-    background:#b08116;
-}
-
-/* TABLE */
-table{
-    width:100%;
-    border-collapse:collapse;
-    background:white;
-    border-radius:10px;
-    overflow:hidden;
-    box-shadow:0 4px 10px rgba(0,0,0,0.1);
-}
-th,td{
-    padding:12px;
-    text-align:left;
-    border-bottom:1px solid #ddd;
-}
-th{
-    background:#b08116;
-    color:white;
-}
-tr:hover{
-    background:#f1f1f1;
-}
-.active-text{ color:green; font-weight:bold; }
-.expired-text{ color:red; font-weight:bold; }
-.delete{ color:red; text-decoration:none; font-weight:bold; }
-
-/* MODALS */
-.modal{
-    display:none;
-    position:fixed;
-    z-index:1000;
-    left:0; top:0;
-    width:100%; height:100%;
-    overflow:auto;
-    background:rgba(0,0,0,0.5);
-}
-.modal-content{
-    background:white;
-    margin:10% auto;
-    padding:20px;
-    border-radius:10px;
-    width:400px;
-    position:relative;
-}
-.close{
-    position:absolute;
-    top:10px; right:15px;
-    font-size:22px;
-    cursor:pointer;
-    color:#333;
-}
-</style>
-</head>
-<body>
-
-<!-- SIDEBAR -->
-<div class="sidebar">
-
-<h2>License Management</h2>
-
-<a onclick="openModal('addModal')">
-<i class="fa fa-plus-circle"></i> Add License
-</a>
-
-<a onclick="openModal('renewModal')">
-<i class="fa fa-sync-alt"></i> Renew License
-</a>
-
-<a onclick="openModal('deleteModal')">
-<i class="fa fa-trash"></i> Delete License
-</a>
-
-<a href="software_reports.php">
-<i class="fa fa-chart-line"></i> Reports
-</a>
-
-<!-- Spacer to push buttons to bottom -->
-<div style="flex-grow:1;"></div>
-
-<a href="super_dashboard.php">
-    <i class="fa fa-arrow-left"></i> Back
-</a>
-
-<a href="logout.php">
-<i class="fa fa-sign-out-alt"></i> Logout
-</a>
-
-</div>
-
-<!-- MAIN CONTENT -->
-<div class="main">
-
-<div class="header"><i class="fa fa-box"></i> IRA Software Subscription Dashboard</div>
-
-<?php if($message){ ?>
-<div class="alert"><?php echo $message; ?></div>
-<?php } ?>
-
-<!-- DASHBOARD CARDS -->
-<div class="cards">
-    <a href="?status=all" class="card">
-        <h3>Total Licenses</h3>
-        <p><?php echo $total; ?></p>
-    </a>
-
-    <a href="?status=expiring" class="card">
-        <h3>Expiring Soon</h3>
-        <p><?php echo $expiring; ?></p>
-    </a>
-
-    <a href="?status=expired" class="card">
-        <h3>Expired</h3>
-        <p><?php echo $expired; ?></p>
-    </a>
-
-    <a href="?status=active" class="card">
-        <h3>Available</h3>
-        <p><?php echo $available; ?></p>
-    </a>
-</div>
-
-<!-- ALERTS -->
-<?php if($alerts->num_rows>0){ ?>
-<div class="alert">
-    <b>⚠️ Renewal Reminder:</b>
-    <ul>
-    <?php while($a=$alerts->fetch_assoc()){ ?>
-        <li><?php echo $a['software_name']; ?> expires on <b><?php echo $a['expiry_date']; ?></b></li>
-    <?php } ?>
-    </ul>
-</div>
-<?php } ?>
-
-<!-- SOFTWARE TABLE -->
-<table>
-<tr>
-<th>ID</th>
-<th>Software</th>
-<th>Vendor</th>
-<th>License</th>
-<th>Total</th>
-<th>Used</th>
-<th>Expiry</th>
-<th>Status</th>
-</tr>
-
-<?php while($row=$result->fetch_assoc()){
-$status="Active"; $class="active-text";
-if($row['expiry_date'] < date("Y-m-d")){ $status="Expired"; $class="expired-text"; }
-?>
-<tr>
-<td><?php echo $row['id']; ?></td>
-<td><?php echo $row['software_name']; ?></td>
-<td><?php echo $row['vendor']; ?></td>
-<td><?php echo $row['license_type']; ?></td>
-<td><?php echo $row['total_licenses']; ?></td>
-<td><?php echo $row['used_licenses']; ?></td>
-<td><?php echo $row['expiry_date']; ?></td>
-<td class="<?php echo $class; ?>"><?php echo $status; ?></td>
-</tr>
-<?php } ?>
-</table>
-</div>
-
-<!-- MODALS -->
-<div id="addModal" class="modal">
-  <div class="modal-content">
-    <span class="close" onclick="closeModal('addModal')">&times;</span>
-    <form method="POST">
-      <h3><i class="fa fa-plus-circle"></i> Add Software</h3>
-      <input type="text" name="software_name" placeholder="Software Name" required>
-      <input type="text" name="vendor" placeholder="Vendor">
-      <input type="text" name="license_type" placeholder="License Type">
-      <input type="number" name="total_licenses" placeholder="Total Licenses">
-      <label>Purchase Date</label>
-      <input type="date" name="purchase_date">
-      <label>Expiry Date</label>
-      <input type="date" name="expiry_date">
-      <input type="number" step="0.01" name="cost" placeholder="Cost">
-      <textarea name="notes" placeholder="Notes"></textarea>
-      <button name="add_software"><i class="fa fa-plus"></i> Add Software</button>
-    </form>
-  </div>
-</div>
-
-<div id="renewModal" class="modal">
-  <div class="modal-content">
-    <span class="close" onclick="closeModal('renewModal')">&times;</span>
-    <form method="POST">
-      <h3><i class="fa fa-sync-alt"></i> Renew License</h3>
-      <input type="number" name="license_id" placeholder="License ID" required>
-      <label>New Expiry Date</label>
-      <input type="date" name="new_expiry_date" required>
-      <button name="renew_license"><i class="fa fa-sync-alt"></i> Renew</button>
-    </form>
-  </div>
-</div>
-
-<div id="deleteModal" class="modal">
-  <div class="modal-content">
-    <span class="close" onclick="closeModal('deleteModal')">&times;</span>
-    <form method="POST">
-      <h3><i class="fa fa-trash"></i> Delete License</h3>
-      <input type="number" name="license_id" placeholder="License ID" required>
-      <button name="delete_license"><i class="fa fa-trash"></i> Delete</button>
-    </form>
-  </div>
-</div>
-
-<script>
-function openModal(id){ document.getElementById(id).style.display='block'; }
-function closeModal(id){ document.getElementById(id).style.display='none'; }
-window.onclick = function(event){
-    ['addModal','renewModal','deleteModal'].forEach(id=>{
-        let modal=document.getElementById(id);
-        if(event.target==modal) modal.style.display='none';
-    });
-}
-</script>
-</body>
-</html>
+<section class="hero"><div><div class="eyebrow">LICENCE MANAGEMENT</div><h1>Software inventory</h1><p>Track subscriptions, licence capacity, renewals, and user access from one workspace.</p></div><a class="button secondary" href="software_reports.php">Open reports</a></section>
+<section class="grid"><?php foreach (['total' => 'Software products', 'active' => 'Active licences', 'expiring' => 'Expiring in 30 days', 'expired' => 'Expired licences'] as $key => $label): ?><article class="card metric"><b><?= e((string) $summary[$key]) ?></b><span><?= e($label) ?></span></article><?php endforeach; ?></section>
+<section class="split" style="margin-top:24px"><div class="panel"><div class="panel-header"><div><h2>Add software</h2><span>Create an inventory record and licence pool.</span></div></div><form method="post" class="form-grid"><input type="hidden" name="csrf" value="<?= csrf() ?>"><input type="hidden" name="action" value="create"><label>Software name<input name="software_name" required></label><label>Vendor<input name="vendor"></label><label>Version<input name="version"></label><label>Licence type<select name="license_type"><option>Subscription</option><option>Perpetual</option><option>Free</option><option>Trial</option><option>Other</option></select></label><label>Licence seats<input type="number" name="total_licenses" min="1" value="1" required></label><label>Purchase date<input type="date" name="purchase_date"></label><label>Expiry date<input type="date" name="expiry_date"></label><label>Cost<input type="number" name="cost" min="0" step="0.01" value="0"></label><label style="grid-column:1/-1">Notes<textarea name="notes" rows="2"></textarea></label><button type="submit">Add software</button></form></div>
+<div class="panel"><div class="panel-header"><div><h2>Assign licence</h2><span>Only active, unexpired products with free seats can be assigned.</span></div></div><form method="post"><input type="hidden" name="csrf" value="<?= csrf() ?>"><input type="hidden" name="action" value="assign"><label>Software<select name="software_id" required><option value="">Choose software</option><?php $softwares->data_seek(0); while ($software = $softwares->fetch_assoc()): $available = (int) $software['total_licenses'] - (int) $software['used_licenses']; if ($software['status'] === 'Active' && $available > 0 && (!$software['expiry_date'] || $software['expiry_date'] >= $today)): ?><option value="<?= $software['id'] ?>"><?= e($software['software_name'] . ($software['version'] ? ' ' . $software['version'] : '') . ' (' . $available . ' free)') ?></option><?php endif; endwhile; ?></select></label><label>User<select name="user_id" required><option value="">Choose user</option><?php while ($user = $users->fetch_assoc()): ?><option value="<?= $user['id'] ?>"><?= e($user['full_name'] . ' - ' . $user['email']) ?></option><?php endwhile; ?></select></label><button type="submit">Assign licence</button></form></div></section>
+<section class="panel" style="margin-top:24px"><div class="panel-header"><div><h2>Licence register</h2><span>Current capacity and renewal state.</span></div></div><div class="table-wrapper"><table><thead><tr><th>Software</th><th>Type</th><th>Seats</th><th>Expiry</th><th>Status</th><th></th></tr></thead><tbody><?php $softwares->data_seek(0); while ($software = $softwares->fetch_assoc()): $available = (int) $software['total_licenses'] - (int) $software['used_licenses']; $expired = $software['expiry_date'] && $software['expiry_date'] < $today; ?><tr><td><strong><?= e($software['software_name']) ?></strong><br><small><?= e(trim($software['vendor'] . ' ' . ($software['version'] ?? ''))) ?></small></td><td><?= e($software['license_type']) ?></td><td><?= e((string) $software['used_licenses']) ?> used / <?= e((string) $software['total_licenses']) ?><br><small><?= e((string) $available) ?> available</small></td><td><?= e($software['expiry_date'] ?: 'No expiry') ?></td><td><span class="status-badge <?= $expired || $software['status'] !== 'Active' ? 'status-inactive' : 'status-active' ?>"><?= e($expired ? 'Expired' : $software['status']) ?></span></td><td><a class="button secondary" href="software_details.php?id=<?= $software['id'] ?>">Details</a></td></tr><?php endwhile; ?></tbody></table></div></section>
+<?php layout_end();
